@@ -1,0 +1,1563 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1c1a17">
+<title>Gridiron — NFL Flash Cards</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏈</text></svg>">
+<style>
+/* ============================================================
+   GRIDIRON — retro bubblegum NFL flash cards
+   One file. No build step. No API keys. Saves to localStorage.
+   ============================================================ */
+
+:root{
+  --stock:#f2e8d2;          /* card stock cream */
+  --stock-dim:#e4d7bb;
+  --ink:#1b1a17;
+  --ink-soft:#5a5344;
+  --felt:#1c1a17;           /* app background */
+  --felt-2:#262320;
+  --rule:#c9b990;
+  --accent:#d8a32b;
+  --radius:14px;
+  --card-w:224px;
+  --safe-b:env(safe-area-inset-bottom,0px);
+}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  margin:0;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, #2f2b26 0%, transparent 60%),
+    var(--felt);
+  color:var(--stock);
+  font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  overscroll-behavior-y:none;
+}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+input,select,textarea{font:inherit}
+
+/* ---------- top bar ---------- */
+.bar{
+  position:sticky;top:0;z-index:40;
+  display:flex;align-items:center;gap:10px;
+  padding:12px 14px 10px;
+  background:linear-gradient(180deg,rgba(28,26,23,.97),rgba(28,26,23,.86));
+  backdrop-filter:blur(10px);
+  border-bottom:1px solid #3a352e;
+}
+.brand{
+  font-family:Impact,"Haettenschweiler","Arial Narrow Bold",Oswald,sans-serif;
+  font-size:22px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--stock);line-height:1;white-space:nowrap;
+}
+.brand em{
+  display:block;font:500 9px/1.2 ui-sans-serif,sans-serif;font-style:normal;
+  letter-spacing:.24em;color:var(--accent);margin-top:3px;
+}
+.bar .spacer{flex:1}
+.search{
+  flex:1;min-width:0;max-width:320px;
+  background:#141312;border:1px solid #413b33;border-radius:999px;
+  padding:8px 14px;color:var(--stock);outline:none;font-size:14px;
+}
+.search:focus{border-color:var(--accent)}
+.search::placeholder{color:#7d7364}
+.iconbtn{
+  width:38px;height:38px;border-radius:10px;border:1px solid #413b33;
+  background:#141312;display:grid;place-items:center;font-size:16px;flex:none;
+}
+.iconbtn:hover{border-color:var(--accent)}
+.iconbtn.primary{background:var(--accent);color:#20180a;border-color:var(--accent);font-weight:700}
+
+/* ---------- deck rail ---------- */
+.decks{
+  display:flex;gap:8px;padding:10px 14px;overflow-x:auto;
+  scrollbar-width:none;border-bottom:1px solid #302b25;
+  position:sticky;top:61px;z-index:35;background:rgba(28,26,23,.94);backdrop-filter:blur(8px);
+}
+.decks::-webkit-scrollbar{display:none}
+.chip{
+  flex:none;padding:7px 13px;border-radius:999px;border:1px solid #4a4238;
+  background:#211e1a;color:#c8bda6;font-size:13px;white-space:nowrap;
+  display:flex;align-items:center;gap:7px;
+}
+.chip .n{font-size:11px;opacity:.6;font-variant-numeric:tabular-nums}
+.chip[aria-selected="true"]{background:var(--stock);color:#1b1a17;border-color:var(--stock);font-weight:600}
+.chip[aria-selected="true"] .n{opacity:.55}
+.chip.add{border-style:dashed;color:#8e8471}
+
+/* ---------- grid ---------- */
+.grid{
+  display:grid;gap:18px;padding:18px 14px calc(90px + var(--safe-b));
+  grid-template-columns:repeat(auto-fill,minmax(var(--card-w),1fr));
+  max-width:1400px;margin:0 auto;
+}
+.empty{
+  grid-column:1/-1;text-align:center;padding:70px 20px;color:#8a8072;
+}
+.empty h2{font-family:Impact,sans-serif;letter-spacing:.05em;color:#c9bda4;margin:0 0 8px;text-transform:uppercase;font-size:20px}
+.empty p{margin:0 0 18px;font-size:14px;line-height:1.6}
+.btn{
+  display:inline-block;padding:10px 18px;border-radius:10px;
+  background:var(--accent);color:#20180a;font-weight:700;font-size:14px;
+}
+.btn.ghost{background:none;border:1px solid #4a4238;color:#c8bda6;font-weight:500}
+
+/* ---------- the card ---------- */
+.card{
+  perspective:1400px;aspect-ratio:2.5/3.5;position:relative;
+  animation:deal .32s cubic-bezier(.2,.9,.3,1.2) backwards;
+}
+@keyframes deal{from{opacity:0;transform:translateY(14px) scale(.96)}}
+@media (prefers-reduced-motion:reduce){.card{animation:none}}
+
+.flipper{
+  position:absolute;inset:0;transform-style:preserve-3d;
+  transition:transform .55s cubic-bezier(.3,.9,.3,1);
+  cursor:pointer;
+}
+@media (prefers-reduced-motion:reduce){.flipper{transition:none}}
+.card.flipped .flipper{transform:rotateY(180deg)}
+/* only the face you're looking at may be clicked */
+.card:not(.flipped) .back{pointer-events:none}
+.card.flipped .front{pointer-events:none}
+
+.face{
+  position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;
+  border-radius:var(--radius);overflow:hidden;
+  background:var(--stock);
+  box-shadow:0 1px 0 rgba(255,255,255,.35) inset, 0 10px 22px -8px rgba(0,0,0,.75), 0 2px 5px rgba(0,0,0,.4);
+}
+.face::after{ /* card-stock grain */
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
+  background-image:radial-gradient(rgba(120,100,60,.14) .5px,transparent .5px);
+  background-size:3px 3px;
+}
+.back{transform:rotateY(180deg)}
+
+/* ----- FRONT ----- */
+.front{padding:9px 9px 0;display:flex;flex-direction:column;background:var(--stock)}
+.photo{
+  position:relative;flex:1;border-radius:6px;overflow:hidden;
+  background:linear-gradient(170deg,var(--c1) 0%,var(--c1) 55%,var(--c2) 100%);
+  display:grid;place-items:center;
+}
+.photo img{
+  width:100%;height:100%;object-fit:cover;object-position:50% 12%;display:block;
+  filter:saturate(.92) contrast(1.04);
+}
+.photo img[hidden]{display:none}
+/* fallback silhouette when no/blocked photo.
+   [hidden] needs saying out loud — the class sets display:grid, which
+   outranks the UA stylesheet's [hidden]{display:none} and would leave the
+   fallback painted on top of a perfectly good photo. */
+.silo[hidden]{display:none}
+.silo{
+  position:absolute;inset:0;display:grid;place-items:center;
+  background:
+    radial-gradient(70% 55% at 50% 78%, rgba(255,255,255,.16), transparent 70%),
+    linear-gradient(170deg,var(--c1),var(--c2));
+}
+.silo b{
+  font-family:Impact,"Arial Narrow Bold",sans-serif;font-size:46px;letter-spacing:.02em;
+  color:rgba(255,255,255,.9);text-shadow:0 2px 0 rgba(0,0,0,.28);line-height:1;
+}
+.silo i{
+  position:absolute;bottom:8px;font-style:normal;font-size:9px;letter-spacing:.18em;
+  color:rgba(255,255,255,.62);text-transform:uppercase;
+}
+/* corner pennant with position */
+.pennant{
+  position:absolute;top:0;left:0;
+  background:var(--c1);color:#fff;font:700 10px/1 ui-sans-serif,sans-serif;
+  letter-spacing:.12em;padding:6px 12px 6px 8px;text-transform:uppercase;
+  clip-path:polygon(0 0,100% 0,calc(100% - 8px) 100%,0 100%);
+  text-shadow:0 1px 2px rgba(0,0,0,.5);
+  box-shadow:inset 0 -2px 0 var(--c2);
+}
+.jersey{
+  position:absolute;top:7px;right:8px;
+  font-family:Impact,"Arial Narrow Bold",sans-serif;font-size:26px;line-height:1;
+  color:rgba(255,255,255,.94);text-shadow:0 2px 3px rgba(0,0,0,.45);
+}
+.nameplate{
+  padding:8px 2px 9px;text-align:center;position:relative;
+}
+.nameplate .nm{
+  font-family:Impact,"Haettenschweiler","Arial Narrow Bold",sans-serif;
+  font-size:clamp(13px,4.4cqw,17px);letter-spacing:.02em;text-transform:uppercase;
+  color:var(--ink);line-height:1.02;
+  display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.nameplate .tm{
+  display:block;margin-top:3px;font:600 8.5px/1 ui-sans-serif,sans-serif;
+  letter-spacing:.2em;text-transform:uppercase;color:var(--c1);
+}
+.card{container-type:inline-size}
+.tape{ /* team color stripe under the photo */
+  height:4px;margin-top:6px;border-radius:2px;
+  background:linear-gradient(90deg,var(--c1) 0 60%,var(--c2) 60% 100%);
+}
+
+/* ----- BACK ----- */
+.back{
+  background:#efe3c6;
+  display:flex;flex-direction:column;padding:11px 11px 9px;
+  font-family:Georgia,"Times New Roman",serif;color:#241f16;
+}
+.back::before{
+  content:"";position:absolute;inset:0;opacity:.55;pointer-events:none;
+  background-image:radial-gradient(rgba(150,120,60,.18) .6px,transparent .6px);
+  background-size:4px 4px;
+}
+.bhead{display:flex;align-items:flex-start;gap:8px;position:relative}
+.cardno{
+  flex:none;width:26px;height:26px;border-radius:50%;
+  background:var(--c1);color:#fff;display:grid;place-items:center;
+  font:700 11px/1 ui-sans-serif,sans-serif;font-variant-numeric:tabular-nums;
+  box-shadow:0 1px 2px rgba(0,0,0,.3);
+}
+.bname{flex:1;min-width:0}
+.bname b{
+  display:block;font-family:Impact,"Arial Narrow Bold",sans-serif;font-weight:400;
+  font-size:14px;letter-spacing:.02em;text-transform:uppercase;line-height:1.06;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.bname span{font:italic 10px/1.3 Georgia,serif;color:#6b5f45;display:block;margin-top:2px}
+.bio{
+  margin:8px 0 0;font-size:9.5px;line-height:1.45;color:#4f4634;
+  border-top:1px solid rgba(120,95,45,.3);border-bottom:1px solid rgba(120,95,45,.3);
+  padding:5px 0;position:relative;
+}
+.statwrap{flex:1;min-height:0;overflow:auto;margin-top:7px;position:relative;scrollbar-width:thin}
+.statwrap::-webkit-scrollbar{width:4px}
+.statwrap::-webkit-scrollbar-thumb{background:rgba(120,95,45,.35);border-radius:4px}
+.slabel{
+  font:700 8px/1 ui-sans-serif,sans-serif;letter-spacing:.16em;text-transform:uppercase;
+  color:#8a7a53;display:flex;align-items:center;gap:6px;margin-bottom:4px;
+}
+.slabel::after{content:"";flex:1;height:1px;background:rgba(120,95,45,.3)}
+table.stats{width:100%;border-collapse:collapse;font-family:ui-sans-serif,sans-serif}
+table.stats td{
+  padding:2.5px 0;font-size:10px;vertical-align:baseline;
+  border-bottom:1px dotted rgba(120,95,45,.35);
+}
+table.stats td:first-child{color:#6b5f45;letter-spacing:.02em}
+table.stats td:last-child{text-align:right;font-weight:700;font-variant-numeric:tabular-nums;color:#241f16}
+.honors{
+  margin-top:7px;font-size:9px;line-height:1.5;color:#5c5139;position:relative;
+}
+.honors b{font:700 8px/1 ui-sans-serif,sans-serif;letter-spacing:.14em;color:#8a7a53;text-transform:uppercase}
+
+/* the old "cartoon fact" box, repurposed for live news */
+.newsbox{
+  flex:none;margin-top:7px;border:1.5px solid #7d6a3c;border-radius:5px;
+  background:#f8f0da;padding:6px 8px 7px;position:relative;
+}
+.newsbox p{max-height:54px;overflow:auto;scrollbar-width:thin}
+.newsbox .nlab{
+  font:700 7.5px/1 ui-sans-serif,sans-serif;letter-spacing:.16em;text-transform:uppercase;
+  color:#9a7b2c;display:flex;align-items:center;gap:5px;margin-bottom:3px;
+}
+.newsbox .nlab .dot{width:5px;height:5px;border-radius:50%;background:#b98b1e;flex:none}
+.newsbox .nlab .dot.live{background:#2e8b45;box-shadow:0 0 0 2px rgba(46,139,69,.2)}
+.newsbox p{margin:0;font-size:9.5px;line-height:1.42;color:#3b3324}
+.newsbox .src{
+  display:block;margin-top:4px;font:600 8px/1 ui-sans-serif,sans-serif;
+  color:#8a7a53;letter-spacing:.04em;
+}
+.newsbox a{color:#8a5b12}
+
+.backtools{
+  flex:none;display:flex;gap:5px;margin-top:7px;position:relative;
+}
+.backtools button{
+  flex:1;padding:5px 4px;border-radius:5px;border:1px solid rgba(120,95,45,.45);
+  background:rgba(255,255,255,.4);
+  font:600 8.5px/1.2 ui-sans-serif,sans-serif;letter-spacing:.06em;
+  text-transform:uppercase;color:#5c5139;
+}
+.backtools button:hover{background:#fff;border-color:#7d6a3c}
+.backtools button.busy{opacity:.5;pointer-events:none}
+
+/* ---------- modals ---------- */
+.scrim{
+  position:fixed;inset:0;z-index:80;background:rgba(10,9,8,.72);
+  backdrop-filter:blur(4px);display:grid;place-items:center;padding:16px;
+  animation:fade .18s ease;
+}
+@keyframes fade{from{opacity:0}}
+.sheet{
+  width:min(460px,100%);max-height:88vh;overflow:auto;
+  background:#211e1a;border:1px solid #443c32;border-radius:16px;
+  padding:20px;box-shadow:0 24px 60px -12px rgba(0,0,0,.8);
+}
+.sheet h3{
+  margin:0 0 16px;font-family:Impact,sans-serif;font-weight:400;
+  letter-spacing:.05em;text-transform:uppercase;font-size:17px;color:var(--stock);
+}
+.field{margin-bottom:12px}
+.field label{
+  display:block;font:600 9px/1 ui-sans-serif,sans-serif;letter-spacing:.16em;
+  text-transform:uppercase;color:#9a8f7c;margin-bottom:5px;
+}
+.field input,.field select,.field textarea{
+  width:100%;padding:9px 11px;border-radius:8px;border:1px solid #443c32;
+  background:#161412;color:var(--stock);outline:none;font-size:14px;
+}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent)}
+.field textarea{resize:vertical;min-height:60px;line-height:1.5}
+.row{display:flex;gap:10px}
+.row .field{flex:1}
+.hint{font-size:11px;color:#8a8072;line-height:1.5;margin:-6px 0 12px}
+.actions{display:flex;gap:9px;margin-top:18px}
+.actions .btn{flex:1;text-align:center;border:none;cursor:pointer}
+.danger{color:#e0755f}
+
+.decklist{display:flex;flex-direction:column;gap:7px;margin-bottom:6px}
+.deckrow{
+  display:flex;align-items:center;gap:11px;padding:11px 13px;border-radius:10px;
+  background:#191715;border:1px solid #3a332b;
+}
+.deckrow input[type=checkbox]{width:17px;height:17px;accent-color:var(--accent);flex:none}
+.deckrow span{flex:1;font-size:14px}
+.deckrow small{font-size:11px;color:#847a6a;font-variant-numeric:tabular-nums}
+
+.bar{
+  height:6px;border-radius:999px;background:#161412;overflow:hidden;
+  border:1px solid #3a332b;margin-top:14px;
+}
+.bar i{
+  display:block;height:100%;width:0;border-radius:999px;background:var(--accent);
+  transition:width .3s ease;
+}
+
+.toast{
+  position:fixed;left:50%;bottom:calc(22px + var(--safe-b));transform:translateX(-50%);
+  background:var(--stock);color:#1b1a17;padding:10px 18px;border-radius:999px;
+  font-size:13px;font-weight:600;z-index:99;box-shadow:0 8px 24px rgba(0,0,0,.5);
+  animation:pop .25s cubic-bezier(.2,.9,.3,1.3);
+}
+@keyframes pop{from{opacity:0;transform:translate(-50%,10px)}}
+
+.fab{
+  position:fixed;right:16px;bottom:calc(16px + var(--safe-b));z-index:45;
+  width:54px;height:54px;border-radius:50%;background:var(--accent);color:#20180a;
+  font-size:26px;display:grid;place-items:center;font-weight:700;
+  box-shadow:0 8px 22px -4px rgba(0,0,0,.7);
+}
+@media(min-width:640px){.fab{display:none}}
+@media(max-width:420px){
+  .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:13px;padding:14px 11px 100px}
+  .brand{font-size:19px}
+}
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="brand">Gridiron<em>flash cards</em></div>
+  <span class="spacer"></span>
+  <input id="search" class="search" type="search" placeholder="Search cards…" autocomplete="off">
+  <button class="iconbtn primary" id="addCardBtn" title="New card">+</button>
+  <button class="iconbtn" id="menuBtn" title="Menu">⋯</button>
+</header>
+
+<nav class="decks" id="deckBar"></nav>
+<main class="grid" id="grid"></main>
+<button class="fab" id="fab" title="New card">+</button>
+
+<!-- Written by scripts/bake-cards.mjs. Absent until you run the bake — that's
+     fine, the app falls back to the small deck built into this file. -->
+<script src="data/cards.js"></script>
+
+<script>
+/* ============================================================
+   1. TEAMS
+   ============================================================ */
+const TEAMS = {
+  ARI:['Cardinals','#97233F','#000000'], ATL:['Falcons','#A71930','#101820'],
+  BAL:['Ravens','#241773','#9E7C0C'],    BUF:['Bills','#00338D','#C60C30'],
+  CAR:['Panthers','#0085CA','#101820'],  CHI:['Bears','#0B162A','#C83803'],
+  CIN:['Bengals','#FB4F14','#000000'],   CLE:['Browns','#311D00','#FF3C00'],
+  DAL:['Cowboys','#003594','#7F9695'],   DEN:['Broncos','#FB4F14','#002244'],
+  DET:['Lions','#0076B6','#B0B7BC'],     GB: ['Packers','#203731','#FFB612'],
+  HOU:['Texans','#03202F','#A71930'],    IND:['Colts','#002C5F','#A2AAAD'],
+  JAX:['Jaguars','#006778','#D7A22A'],   KC: ['Chiefs','#E31837','#FFB81C'],
+  LV: ['Raiders','#000000','#A5ACAF'],   LAC:['Chargers','#0080C6','#FFC20E'],
+  LAR:['Rams','#003594','#FFA300'],      MIA:['Dolphins','#008E97','#FC4C02'],
+  MIN:['Vikings','#4F2683','#FFC62F'],   NE: ['Patriots','#002244','#C60C30'],
+  NO: ['Saints','#101820','#D3BC8D'],    NYG:['Giants','#0B2265','#A71930'],
+  NYJ:['Jets','#125740','#000000'],      PHI:['Eagles','#004C54','#A5ACAF'],
+  PIT:['Steelers','#101820','#FFB612'],  SF: ['49ers','#AA0000','#B3995D'],
+  SEA:['Seahawks','#002244','#69BE28'],  TB: ['Buccaneers','#D50A0A','#34302B'],
+  TEN:['Titans','#0C2340','#4B92DB'],    WSH:['Commanders','#5A1414','#FFB612'],
+  FA: ['Free Agent','#4a4238','#8a8072']
+};
+
+/* The bake also brings back ESPN's team colours. We keep the hand-tuned
+   palette above — it's picked so white type stays readable on the pennant —
+   and only take ESPN's for a team we don't already know about. */
+if(window.GRIDIRON_TEAMS){
+  for(const [ab,t] of Object.entries(window.GRIDIRON_TEAMS)){
+    if(!TEAMS[ab] && t?.c1 && t?.c2) TEAMS[ab] = [t.name || ab, t.c1, t.c2];
+  }
+}
+
+/* ============================================================
+   2. SEED DECK
+   Ships with the app so it works offline, instantly, no keys.
+   Stat lines are a starting point — the ⟳ button on the back
+   pulls live numbers + news when you're online.
+   ============================================================ */
+const SEED = [
+  {n:"Patrick Mahomes",t:"KC",p:"QB",j:15,e:"3139477",b:"6-2 · 225 · Texas Tech",
+   s:[["Pro Bowls","6×"],["NFL MVP","2018, 2022"],["Super Bowl MVP","3×"],["Career Pass TD","250+"]],
+   h:"3× Super Bowl champion. Fastest QB to 200 career passing TDs.",
+   w:"The face of the league — Kansas City's window stays open as long as he's upright."},
+  {n:"Josh Allen",t:"BUF",p:"QB",j:17,e:"3918298",b:"6-5 · 237 · Wyoming",
+   s:[["Pro Bowls","3×"],["NFL MVP","2024"],["Career Rush TD","60+"],["Career Pass TD","190+"]],
+   h:"2024 NFL MVP. Most rushing TDs by a QB in a single decade span.",
+   w:"Bulldozer with a cannon. Buffalo's whole offense is a referendum on his arm."},
+  {n:"Lamar Jackson",t:"BAL",p:"QB",j:8,e:"3916387",b:"6-2 · 205 · Louisville",
+   s:[["NFL MVP","2019, 2023"],["Pro Bowls","3×"],["Career Rush Yds","6,000+"],["Rush Yds/Season","1,206 (2019)"]],
+   h:"Only unanimous MVP QB in Ravens history. First QB with 1,000+ rush yards twice.",
+   w:"The most dangerous open-field runner to ever play the position."},
+  {n:"Joe Burrow",t:"CIN",p:"QB",j:9,e:"3915511",b:"6-4 · 215 · LSU",
+   s:[["Pro Bowls","2×"],["Comeback Player","2022"],["Career Comp %","68%+"],["Playoff Record","5-2"]],
+   h:"Led Cincinnati to Super Bowl LVI. Best single-season completion % in NFL history (2021).",
+   w:"Cool as anything in a two-minute drill. Health is the only real question."},
+  {n:"Jalen Hurts",t:"PHI",p:"QB",j:1,e:"4040715",b:"6-1 · 223 · Oklahoma",
+   s:[["Super Bowl MVP","LIX"],["Pro Bowls","3×"],["Career Rush TD","60+"],["Tush Push","Undefeated-ish"]],
+   h:"Super Bowl LIX MVP. Rushing TD record for a QB in a Super Bowl.",
+   w:"Turned the quarterback sneak into an unstoppable offensive philosophy."},
+  {n:"C.J. Stroud",t:"HOU",p:"QB",j:7,e:"4432577",b:"6-3 · 218 · Ohio State",
+   s:[["Off. Rookie of Yr","2023"],["Pro Bowls","1×"],["Rookie Pass Yds","4,108"],["Playoff Wins","1"]],
+   h:"Best rookie QB season by passer rating in the modern era.",
+   w:"Houston's franchise is fully rebuilt around his poise."},
+  {n:"Jayden Daniels",t:"WSH",p:"QB",j:5,e:"4426348",b:"6-4 · 210 · LSU",
+   s:[["Off. Rookie of Yr","2024"],["Heisman","2023"],["Rookie Rush Yds","890+"],["NFC Title Games","1"]],
+   h:"2024 Offensive Rookie of the Year. Took Washington to the NFC Championship as a rookie.",
+   w:"Instantly made the Commanders relevant again. Rare poise for his age."},
+  {n:"Caleb Williams",t:"CHI",p:"QB",j:18,e:"4431611",b:"6-1 · 215 · USC",
+   s:[["Heisman","2022"],["Draft","No. 1 overall, 2024"],["Rookie Pass Yds","3,500+"],["Rookie INT","6"]],
+   h:"Fewest interceptions by a rookie QB with 500+ attempts.",
+   w:"Improviser with a gunslinger streak. Chicago's offense is being built to his shape."},
+  {n:"Brock Purdy",t:"SF",p:"QB",j:13,e:"4361741",b:"6-1 · 220 · Iowa State",
+   s:[["Pro Bowls","1×"],["Draft","No. 262 (Mr. Irrelevant)"],["Career Y/A","8.5+"],["Super Bowl Apps","1"]],
+   h:"Only 'Mr. Irrelevant' to start a Super Bowl.",
+   w:"The most efficient value contract in football until the extension landed."},
+  {n:"Justin Herbert",t:"LAC",p:"QB",j:10,e:"4038941",b:"6-6 · 236 · Oregon",
+   s:[["Off. Rookie of Yr","2020"],["Pro Bowls","1×"],["Fastest to 20K yds","Record"],["Career Pass TD","150+"]],
+   h:"Fastest player in NFL history to 20,000 career passing yards.",
+   w:"Prototype arm talent. Harbaugh's run-first system is the new variable."},
+
+  {n:"Ja'Marr Chase",t:"CIN",p:"WR",j:1,e:"4362628",b:"6-0 · 201 · LSU",
+   s:[["Triple Crown","2024"],["Off. Rookie of Yr","2021"],["Pro Bowls","4×"],["Career Rec TD","50+"]],
+   h:"2024 receiving Triple Crown — led NFL in catches, yards and TDs.",
+   w:"Burrow's college roommate and the most bankable target in football."},
+  {n:"Justin Jefferson",t:"MIN",p:"WR",j:18,e:"4262921",b:"6-1 · 195 · LSU",
+   s:[["Off. Player of Yr","2022"],["Pro Bowls","4×"],["Fastest to 5K yds","Record"],["Career Rec Yds","7,000+"]],
+   h:"Fastest player to 5,000 career receiving yards. Highest yards-per-game average all-time.",
+   w:"The 'Griddy' is his, but the route running is what scares coordinators."},
+  {n:"CeeDee Lamb",t:"DAL",p:"WR",j:88,e:"4241389",b:"6-2 · 200 · Oklahoma",
+   s:[["Pro Bowls","4×"],["All-Pro 1st Tm","2023"],["Season Rec","135 (2023)"],["Career Rec Yds","7,000+"]],
+   h:"Cowboys single-season receptions record. Wears the franchise's legendary No. 88.",
+   w:"Carries the Dallas passing game whether or not it's convenient."},
+  {n:"Tyreek Hill",t:"MIA",p:"WR",j:10,e:"3116406",b:"5-10 · 191 · West Alabama",
+   s:[["Pro Bowls","8×"],["Season Rec Yds","1,799 (2023)"],["Career Rec TD","80+"],["40 time","4.29"]],
+   h:"Nicknamed 'Cheetah.' Came within 61 yards of the single-season receiving record.",
+   w:"Still the fastest man in the sport when the track is dry."},
+  {n:"Amon-Ra St. Brown",t:"DET",p:"WR",j:14,e:"4374302",b:"6-0 · 202 · USC",
+   s:[["Pro Bowls","3×"],["All-Pro 1st Tm","2023"],["Season Rec","119 (2023)"],["Draft","4th round, 2021"]],
+   h:"Fourth-round pick turned top-five receiver. Set the Lions' single-season receptions record.",
+   w:"The 'Sun God.' Detroit's toughness in wide receiver form."},
+  {n:"Puka Nacua",t:"LAR",p:"WR",j:17,e:"4426515",b:"6-2 · 201 · BYU",
+   s:[["Rookie Rec","105 (record)"],["Rookie Rec Yds","1,486 (record)"],["Pro Bowls","1×"],["Draft","5th round, 2023"]],
+   h:"NFL rookie records for receptions and receiving yards.",
+   w:"A fifth-rounder who broke records nobody expected to fall."},
+
+  {n:"Travis Kelce",t:"KC",p:"TE",j:87,e:"15847",b:"6-5 · 250 · Cincinnati",
+   s:[["Pro Bowls","10×"],["1,000-yd seasons","7 straight"],["Super Bowl Rings","3"],["Playoff Rec","Most all-time, TE"]],
+   h:"Most receiving yards by a tight end in playoff history. Seven straight 1,000-yard seasons.",
+   w:"The most decorated tight end of his era, on and off the field."},
+  {n:"George Kittle",t:"SF",p:"TE",j:85,e:"3040151",b:"6-4 · 250 · Iowa",
+   s:[["Pro Bowls","5×"],["Season Rec Yds","1,377 (record, TE)"],["Career Rec Yds","6,000+"],["Draft","5th round, 2017"]],
+   h:"Once held the single-season receiving yards record for a tight end.",
+   w:"Blocks like a tackle, runs like a receiver, celebrates like nobody's watching."},
+  {n:"Brock Bowers",t:"LV",p:"TE",j:89,e:"4432665",b:"6-3 · 243 · Georgia",
+   s:[["Rookie Rec, TE","112 (record)"],["Off. Rookie of Yr","Finalist"],["Pro Bowls","1×"],["Mackey Award","2×"]],
+   h:"Broke the NFL rookie record for receptions by a tight end.",
+   w:"Instantly the best thing about the Raiders offense."},
+
+  {n:"Saquon Barkley",t:"PHI",p:"RB",j:26,e:"3929630",b:"6-0 · 233 · Penn State",
+   s:[["Off. Player of Yr","2024"],["Season Rush Yds","2,005 (2024)"],["Pro Bowls","4×"],["Super Bowl Rings","1"]],
+   h:"Ninth player ever to rush for 2,000 yards in a season — then won the Super Bowl.",
+   w:"The reverse hurdle is now a permanent part of NFL highlight reels."},
+  {n:"Christian McCaffrey",t:"SF",p:"RB",j:23,e:"3117251",b:"5-11 · 210 · Stanford",
+   s:[["Off. Player of Yr","2023"],["1,000/1,000 season","2019"],["Pro Bowls","4×"],["Season Scrim Yds","2,392"]],
+   h:"One of only three players with 1,000 rushing and 1,000 receiving yards in a season.",
+   w:"When healthy, the most complete offensive weapon in football."},
+  {n:"Derrick Henry",t:"BAL",p:"RB",j:22,e:"3043078",b:"6-3 · 247 · Alabama",
+   s:[["Off. Player of Yr","2020"],["2,000-yd season","2020"],["Pro Bowls","5×"],["Career Rush Yds","11,000+"]],
+   h:"Rushed for 2,027 yards in 2020. Heisman winner. 'King Henry.'",
+   w:"Still running defenders over well past the age RBs are supposed to fall off."},
+  {n:"Bijan Robinson",t:"ATL",p:"RB",j:7,e:"4430807",b:"6-0 · 215 · Texas",
+   s:[["Pro Bowls","2×"],["Draft","No. 8 overall, 2023"],["Season Scrim Yds","1,900+"],["Career YPC","4.8+"]],
+   h:"Doak Walker Award winner. Top-10 pick at a position teams stopped drafting early.",
+   w:"Atlanta's offense goes exactly as far as he carries it."},
+  {n:"Jahmyr Gibbs",t:"DET",p:"RB",j:26,e:"4429795",b:"5-9 · 200 · Alabama",
+   s:[["Pro Bowls","1×"],["Season Rush TD","16 (2024)"],["Career YPC","5.0+"],["Draft","No. 12, 2023"]],
+   h:"Half of Detroit's 'Sonic and Knuckles' backfield.",
+   w:"Breakaway speed that turns a four-yard crease into six points."},
+
+  {n:"Myles Garrett",t:"CLE",p:"DE",j:95,e:"3121023",b:"6-4 · 272 · Texas A&M",
+   s:[["Def. Player of Yr","2023"],["Pro Bowls","6×"],["Career Sacks","100+"],["Season Sacks","16.0"]],
+   h:"2023 Defensive Player of the Year. Browns' all-time sack leader.",
+   w:"A one-man pass rush on a roster that keeps asking him to be exactly that."},
+  {n:"Micah Parsons",t:"GB",p:"LB",j:1,e:"4361423",b:"6-3 · 245 · Penn State",
+   s:[["Def. Rookie of Yr","2021"],["Pro Bowls","4×"],["Sacks, first 3 yrs","40.5"],["All-Pro 1st Tm","2×"]],
+   h:"Most sacks by any player in his first three NFL seasons since the stat became official.",
+   w:"Traded to Green Bay in a blockbuster — now terrorizing the NFC North from the other side."},
+  {n:"T.J. Watt",t:"PIT",p:"LB",j:90,e:"3045147",b:"6-4 · 252 · Wisconsin",
+   s:[["Def. Player of Yr","2021"],["Season Sacks","22.5 (record)"],["Pro Bowls","7×"],["Career FF","30+"]],
+   h:"Tied the NFL single-season sack record with 22.5 in just 15 games.",
+   w:"Forces more fumbles than anyone alive. Steelers defense begins and ends with him."},
+  {n:"Nick Bosa",t:"SF",p:"DE",j:97,e:"3916836",b:"6-4 · 266 · Ohio State",
+   s:[["Def. Player of Yr","2022"],["Def. Rookie of Yr","2019"],["Pro Bowls","4×"],["Career Sacks","60+"]],
+   h:"Only the second player to win both Defensive Rookie of the Year and DPOY.",
+   w:"The engine of San Francisco's front four."},
+  {n:"Aidan Hutchinson",t:"DET",p:"DE",j:97,e:"4430802",b:"6-7 · 268 · Michigan",
+   s:[["Pro Bowls","1×"],["Draft","No. 2 overall, 2022"],["Rookie Sacks","9.5"],["Sacks thru 8 gms","7.5 (2024)"]],
+   h:"Was on a record sack pace in 2024 before a season-ending leg injury.",
+   w:"Detroit's defensive identity — the comeback is the story to watch."},
+  {n:"Sauce Gardner",t:"NYJ",p:"CB",j:1,e:"4426362",b:"6-3 · 200 · Cincinnati",
+   s:[["Def. Rookie of Yr","2022"],["All-Pro 1st Tm","2×"],["Pro Bowls","3×"],["College TDs allowed","0"]],
+   h:"Never allowed a touchdown in his college career. First-team All-Pro as a rookie.",
+   w:"Quarterbacks simply stopped looking at his side of the field."},
+  {n:"Patrick Surtain II",t:"DEN",p:"CB",j:2,e:"4241463",b:"6-2 · 202 · Alabama",
+   s:[["Def. Player of Yr","2024"],["Pro Bowls","3×"],["All-Pro 1st Tm","2×"],["Career INT","10+"]],
+   h:"2024 Defensive Player of the Year — the first cornerback to win it since 2009.",
+   w:"The rare corner good enough to win an award built for pass rushers."},
+
+  {n:"Andy Reid",t:"KC",p:"HC",j:null,e:null,b:"Head Coach · Since 2013",
+   s:[["Super Bowl Rings","3"],["Career Wins","280+"],["Playoff Wins","Most active"],["Coach of Yr","2002"]],
+   h:"One of only six coaches with 280+ career wins. Three Super Bowl titles in Kansas City.",
+   w:"Still the best game-week play designer in football, cheeseburger jokes notwithstanding."},
+  {n:"Kyle Shanahan",t:"SF",p:"HC",j:null,e:null,b:"Head Coach · Since 2017",
+   s:[["Super Bowl Apps","2"],["NFC Titles","2"],["Coaching tree","Extensive"],["Off. rank","Top-5 repeatedly"]],
+   h:"His outside-zone scheme is the most copied offensive system of the last decade.",
+   w:"The league's most imitated play-caller, still hunting the ring."},
+  {n:"Sean McVay",t:"LAR",p:"HC",j:null,e:null,b:"Head Coach · Since 2017",
+   s:[["Super Bowl Rings","1"],["Coach of Yr","2017"],["Youngest HC","Modern era"],["Playoff Apps","5+"]],
+   h:"Youngest head coach in modern NFL history — and youngest to win a Super Bowl.",
+   w:"Spawned an entire generation of thirty-something head coaching hires."},
+  {n:"Dan Campbell",t:"DET",p:"HC",j:null,e:null,b:"Head Coach · Since 2021",
+   s:[["NFC North Titles","2+"],["Best season","15-2 (2024)"],["4th-down rate","League-leading"],["Kneecaps","Biting"]],
+   h:"Took Detroit from 3-13-1 to the NFC's No. 1 seed in three seasons.",
+   w:"The most aggressive fourth-down coach in the league, and the most quotable."},
+  {n:"Mike Tomlin",t:"PIT",p:"HC",j:null,e:null,b:"Head Coach · Since 2007",
+   s:[["Losing seasons","0"],["Super Bowl Rings","1"],["Career Wins","180+"],["Youngest SB winner","Age 36"]],
+   h:"Has never had a losing season in his entire head coaching career.",
+   w:"The longest active streak of respectability in professional sports."},
+  {n:"John Harbaugh",t:"BAL",p:"HC",j:null,e:null,b:"Head Coach · Since 2008",
+   s:[["Super Bowl Rings","1"],["Playoff Wins","12+"],["Career Wins","170+"],["Special teams","Origin story"]],
+   h:"Won Super Bowl XLVII against his own brother's team.",
+   w:"Built the offense entirely around Lamar and never looked back."}
+];
+
+/* ============================================================
+   3. STATE + STORAGE
+   ============================================================ */
+const KEY = 'gridiron.v1';
+const uid = p => p + Math.random().toString(36).slice(2,9);
+
+/* Where the deck comes from: the baked file if you've run the bake, otherwise
+   the small deck built into this file. */
+const BAKED = Array.isArray(window.GRIDIRON_CARDS) && window.GRIDIRON_CARDS.length > 0;
+const STAMP = BAKED ? 'baked:' + window.GRIDIRON_CARDS.length : 'builtin';
+
+function builtInCards(){
+  const cards = {};
+  SEED.forEach((r,i) => {
+    const id = 'seed_' + i;
+    cards[id] = {
+      id, name:r.n, team:r.t, pos:r.p, jersey:r.j, espnId:r.e,
+      bio:r.b, stats:r.s.map(([k,v])=>({k,v})), honors:r.h, note:r.w,
+      photo:null, no:i+1, live:null
+    };
+  });
+  return cards;
+}
+
+function bakedCards(){
+  const cards = {};
+  window.GRIDIRON_CARDS.forEach(c => {
+    if(!c || !c.id || !c.name) return;
+    cards[c.id] = {
+      live:null, honors:'', note:'', photo:null, stats:[], espnId:null,
+      ...c, jersey: c.jersey ?? ''
+    };
+  });
+  return cards;
+}
+
+const defaultCards = () => BAKED ? bakedCards() : builtInCards();
+
+function load(){
+  let saved = null;
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(raw){
+      const s = JSON.parse(raw);
+      if(s && s.cards && s.decks) saved = s;
+    }
+  }catch(e){ console.warn('Could not read saved data:', e); }
+
+  if(!saved) return {
+    cards: defaultCards(),
+    decks: [{id:'d_starter', name:'Starter Pack', cards:[]}],
+    active: 'ALL',
+    flipped: {},
+    stamp: STAMP
+  };
+
+  // An in-app league import is newer and more specific than any baked file
+  // sitting on disk — never let the bake clobber it.
+  const imported = String(saved.stamp || '').startsWith('espn:');
+  return (BAKED && !imported && saved.stamp !== STAMP) ? adoptBaked(saved) : saved;
+}
+
+/* A fresh bake landed. Swap in the new deck, keep every card you made
+   yourself, and follow your decks across by name so the stacks survive. */
+function adoptBaked(saved){
+  const fresh  = bakedCards();
+  const byName = {};
+  Object.values(fresh).forEach(c => { byName[c.name.toLowerCase()] = c.id; });
+
+  const mine = {};
+  Object.values(saved.cards || {}).forEach(c => {
+    if(String(c.id).startsWith('c_')) mine[c.id] = c;
+  });
+
+  const remap = oldId => {
+    if(mine[oldId]) return oldId;
+    const old = saved.cards?.[oldId];
+    return old ? (byName[String(old.name).toLowerCase()] || null) : null;
+  };
+
+  const decks = (saved.decks || []).map(d => ({
+    ...d, cards: [...new Set((d.cards || []).map(remap).filter(Boolean))]
+  }));
+
+  return {
+    cards: {...fresh, ...mine},
+    decks,
+    active: (saved.active === 'ALL' || decks.some(d => d.id === saved.active))
+      ? saved.active : 'ALL',
+    flipped: {},
+    stamp: STAMP
+  };
+}
+
+/* Declared after everything load() leans on, so the consts above are
+   initialised by the time it runs. */
+let state = load();
+
+let saveTimer;
+function save(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(()=>{
+    try{ localStorage.setItem(KEY, JSON.stringify(state)); }
+    catch(e){ toast('Storage full — try smaller photos'); }
+  }, 120);
+}
+
+/* ============================================================
+   4. HELPERS
+   ============================================================ */
+const $  = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function teamOf(ab){ return TEAMS[ab] || TEAMS.FA; }
+function initials(name){
+  return String(name||'?').split(/\s+/).filter(Boolean).slice(0,2)
+    .map(w=>w[0]).join('').toUpperCase();
+}
+/* Photos, in order of preference:
+   1. one you set yourself (upload or pasted URL)
+   2. a headshot cached on this device by the league import — no network
+   3. the remote URL, only until you've imported                        */
+function photoURL(c){
+  if(c.photo) return c.photo;
+  if(c.espnId && PHOTOS.has(c.espnId)) return PHOTOS.get(c.espnId);
+  if(c.photoRemote) return c.photoRemote;
+  if(c.espnId) return `${ESPN.cdn}/${c.espnId}.png&w=350&h=254`;
+  return null;
+}
+function newsSearchURL(c){
+  const t = teamOf(c.team)[0];
+  return 'https://news.google.com/search?q=' + encodeURIComponent(`"${c.name}" ${t} NFL`);
+}
+function toast(msg){
+  document.querySelectorAll('.toast').forEach(t=>t.remove());
+  const el = document.createElement('div');
+  el.className = 'toast'; el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(), 2400);
+}
+
+/* ============================================================
+   4b. PHOTO VAULT (IndexedDB)
+   Headshots are far too big for localStorage, so cached images live in
+   IndexedDB as blobs. On boot we mint an object URL for each one, and
+   from then on every photo on screen is served from this device.
+   ============================================================ */
+const VAULT = {db:'gridiron', store:'photos', version:1};
+const PHOTOS = new Map();          // espnId -> blob: URL
+
+function openVault(){
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(VAULT.db, VAULT.version);
+    r.onupgradeneeded = () => {
+      if(!r.result.objectStoreNames.contains(VAULT.store)) r.result.createObjectStore(VAULT.store);
+    };
+    r.onsuccess = () => res(r.result);
+    r.onerror   = () => rej(r.error);
+  });
+}
+
+function vaultTx(mode, fn){
+  return openVault().then(db => new Promise((res, rej) => {
+    const tx = db.transaction(VAULT.store, mode);
+    const out = fn(tx.objectStore(VAULT.store));
+    tx.oncomplete = () => res(out?.result ?? out);
+    tx.onerror    = () => rej(tx.error);
+  }));
+}
+
+const vaultPut   = (k, blob) => vaultTx('readwrite', s => s.put(blob, k));
+const vaultClear = ()        => vaultTx('readwrite', s => s.clear());
+
+/** Pull every cached headshot into memory as object URLs. */
+async function loadVault(){
+  try{
+    const db = await openVault();
+    const [keys, vals] = await Promise.all([
+      new Promise((res,rej)=>{ const q = db.transaction(VAULT.store).objectStore(VAULT.store).getAllKeys();
+        q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }),
+      new Promise((res,rej)=>{ const q = db.transaction(VAULT.store).objectStore(VAULT.store).getAll();
+        q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); })
+    ]);
+    PHOTOS.forEach(u => URL.revokeObjectURL(u));
+    PHOTOS.clear();
+    keys.forEach((k, i) => { if(vals[i]) PHOTOS.set(String(k), URL.createObjectURL(vals[i])); });
+  }catch(e){ console.warn('Photo vault unavailable:', e); }
+  return PHOTOS.size;
+}
+
+/* ============================================================
+   5. RENDER
+   ============================================================ */
+function visibleCards(){
+  const q = ($('#search').value || '').trim().toLowerCase();
+  let list = Object.values(state.cards);
+
+  if(state.active !== 'ALL'){
+    const deck = state.decks.find(d => d.id === state.active);
+    const set = new Set(deck ? deck.cards : []);
+    list = list.filter(c => set.has(c.id));
+  }
+  if(q){
+    list = list.filter(c =>
+      (c.name+' '+c.pos+' '+c.team+' '+teamOf(c.team)[0]+' '+(c.bio||''))
+        .toLowerCase().includes(q));
+  }
+  return list.sort((a,b)=>(a.no||999)-(b.no||999) || a.name.localeCompare(b.name));
+}
+
+function renderDeckBar(){
+  const bar = $('#deckBar');
+  const total = Object.keys(state.cards).length;
+  let html = `<button class="chip" data-deck="ALL" aria-selected="${state.active==='ALL'}">
+    All Cards <span class="n">${total}</span></button>`;
+  state.decks.forEach(d=>{
+    html += `<button class="chip" data-deck="${d.id}" aria-selected="${state.active===d.id}">
+      ${esc(d.name)} <span class="n">${d.cards.length}</span></button>`;
+  });
+  html += `<button class="chip add" data-new-deck="1">+ New deck</button>`;
+  bar.innerHTML = html;
+}
+
+function cardHTML(c){
+  const [tname,c1,c2] = teamOf(c.team);
+  const src = photoURL(c);
+  const flipped = state.flipped[c.id] ? ' flipped' : '';
+  const stats = (c.live?.stats || c.stats || []);
+  const news  = c.live?.news;
+
+  return `
+  <div class="card${flipped}" data-id="${c.id}" style="--c1:${c1};--c2:${c2}">
+   <div class="flipper">
+
+    <div class="face front">
+      <div class="photo">
+        ${src ? `<img src="${esc(src)}" alt="${esc(c.name)}" loading="lazy"
+                  onerror="photoFail(this,'${c.id}')">
+                <div class="silo" hidden><b>${esc(initials(c.name))}</b><i>${esc(tname)}</i></div>`
+              : `<div class="silo"><b>${esc(initials(c.name))}</b><i>${esc(tname)}</i></div>`}
+        <div class="pennant">${esc(c.pos||'')}</div>
+        ${c.jersey != null && c.jersey !== '' ? `<div class="jersey">${esc(c.jersey)}</div>` : ''}
+      </div>
+      <div class="tape"></div>
+      <div class="nameplate">
+        <span class="nm">${esc(c.name)}</span>
+        <span class="tm">${esc(tname)}</span>
+      </div>
+    </div>
+
+    <div class="face back">
+      <div class="bhead">
+        <div class="cardno">${c.no || '•'}</div>
+        <div class="bname">
+          <b>${esc(c.name)}</b>
+          <span>${esc(c.pos||'')} · ${esc(tname)}</span>
+        </div>
+      </div>
+      ${c.bio ? `<div class="bio">${esc(c.bio)}</div>` : ''}
+
+      <div class="statwrap">
+        ${stats.length ? `
+          <div class="slabel">${c.live?.stats ? 'Live Stats' : 'Career Card'}</div>
+          <table class="stats">
+            ${stats.map(s=>`<tr><td>${esc(s.k)}</td><td>${esc(s.v)}</td></tr>`).join('')}
+          </table>` : ''}
+        ${c.honors ? `<div class="honors"><b>Did you know</b><br>${esc(c.honors)}</div>` : ''}
+      </div>
+
+      <div class="newsbox">
+        <div class="nlab"><span class="dot${news?' live':''}"></span>${news ? 'Latest' : 'Scouting Note'}</div>
+        <p>${esc(news ? news.text : (c.note || 'No note yet — tap Refresh for the latest.'))}</p>
+        <span class="src">${news
+          ? esc(news.src || 'ESPN')
+          : `<a href="${esc(newsSearchURL(c))}" target="_blank" rel="noopener noreferrer">Search the news →</a>`}</span>
+      </div>
+
+      <div class="backtools">
+        <button data-act="refresh">⟳ Refresh</button>
+        <button data-act="decks">Decks</button>
+        <button data-act="edit">Edit</button>
+      </div>
+    </div>
+
+   </div>
+  </div>`;
+}
+
+function render(){
+  renderDeckBar();
+  const list = visibleCards();
+  const grid = $('#grid');
+  if(!list.length){
+    const inDeck = state.active !== 'ALL';
+    grid.innerHTML = `<div class="empty">
+      <h2>${inDeck ? 'This deck is empty' : 'No cards found'}</h2>
+      <p>${inDeck
+        ? 'Flip any card and hit <b>Decks</b> to add it here.'
+        : 'Try a different search, or make a card of your own.'}</p>
+      <button class="btn" onclick="openEditor()">+ New card</button>
+    </div>`;
+    return;
+  }
+  grid.innerHTML = list.map(cardHTML).join('');
+}
+
+/* ============================================================
+   6. INTERACTIONS
+   ============================================================ */
+document.addEventListener('click', e => {
+  const chip = e.target.closest('[data-deck]');
+  if(chip){ state.active = chip.dataset.deck; save(); render(); return; }
+  if(e.target.closest('[data-new-deck]')){ newDeck(); return; }
+
+  const tool = e.target.closest('.backtools button');
+  if(tool){
+    e.stopPropagation();
+    const id = tool.closest('.card').dataset.id;
+    const act = tool.dataset.act;
+    if(act === 'refresh') refreshCard(id, tool);
+    if(act === 'decks')   openDeckPicker(id);
+    if(act === 'edit')    openEditor(id);
+    return;
+  }
+  if(e.target.closest('.newsbox a')) { e.stopPropagation(); return; }
+
+  const card = e.target.closest('.card');
+  if(card){
+    const id = card.dataset.id;
+    state.flipped[id] = !state.flipped[id];
+    card.classList.toggle('flipped');
+    save();
+  }
+});
+
+$('#search').addEventListener('input', render);
+$('#addCardBtn').addEventListener('click', ()=>openEditor());
+$('#fab').addEventListener('click', ()=>openEditor());
+$('#menuBtn').addEventListener('click', openMenu);
+
+/* ============================================================
+   7. DECKS
+   ============================================================ */
+function newDeck(){
+  const name = prompt('Name your deck', 'My Deck');
+  if(!name) return;
+  const d = {id:uid('d_'), name:name.trim().slice(0,40), cards:[]};
+  state.decks.push(d);
+  state.active = d.id;
+  save(); render();
+  toast('Deck created');
+}
+
+function openDeckPicker(cardId){
+  const card = state.cards[cardId];
+  const rows = state.decks.map(d=>`
+    <label class="deckrow">
+      <input type="checkbox" data-deck-id="${d.id}" ${d.cards.includes(cardId)?'checked':''}>
+      <span>${esc(d.name)}</span><small>${d.cards.length}</small>
+    </label>`).join('');
+
+  modal(`
+    <h3>Add “${esc(card.name)}” to…</h3>
+    <div class="decklist">${rows || '<p class="hint">No decks yet.</p>'}</div>
+    <button class="btn ghost" id="mkDeck" style="width:100%;margin-top:6px">+ New deck</button>
+    <div class="actions"><button class="btn" id="done">Done</button></div>
+  `, root => {
+    root.querySelectorAll('[data-deck-id]').forEach(cb=>{
+      cb.addEventListener('change', ()=>{
+        const d = state.decks.find(x=>x.id===cb.dataset.deckId);
+        if(cb.checked){ if(!d.cards.includes(cardId)) d.cards.push(cardId); }
+        else d.cards = d.cards.filter(x=>x!==cardId);
+        save(); renderDeckBar();
+      });
+    });
+    root.querySelector('#mkDeck').onclick = ()=>{ closeModal(); newDeck(); };
+    root.querySelector('#done').onclick = ()=>{ closeModal(); render(); };
+  });
+}
+
+/* ============================================================
+   8. CARD EDITOR
+   ============================================================ */
+function openEditor(id){
+  const c = id ? state.cards[id] : null;
+  const teamOpts = Object.entries(TEAMS)
+    .map(([ab,[nm]])=>`<option value="${ab}" ${c && c.team===ab?'selected':''}>${ab} — ${nm}</option>`)
+    .join('');
+  const statText = (c?.stats||[]).map(s=>`${s.k}: ${s.v}`).join('\n');
+
+  modal(`
+    <h3>${c ? 'Edit card' : 'New card'}</h3>
+    <div class="field"><label>Name</label>
+      <input id="f_name" value="${esc(c?.name||'')}" placeholder="Player, coach, anybody"></div>
+    <div class="row">
+      <div class="field"><label>Team</label><select id="f_team">${teamOpts}</select></div>
+      <div class="field"><label>Position</label>
+        <input id="f_pos" value="${esc(c?.pos||'')}" placeholder="QB / HC / GM" maxlength="4"></div>
+      <div class="field" style="max-width:82px"><label>No.</label>
+        <input id="f_jersey" value="${esc(c?.jersey??'')}" placeholder="00" maxlength="2"></div>
+    </div>
+    <div class="field"><label>Photo</label>
+      <input id="f_photo" value="${esc(c?.photo||'')}" placeholder="Paste an image URL…">
+      <input type="file" id="f_file" accept="image/*" style="margin-top:8px;font-size:12px">
+    </div>
+    <p class="hint">Leave blank and we'll try the official headshot, then fall back to a
+      classic silhouette.</p>
+    <div class="field"><label>Bio line</label>
+      <input id="f_bio" value="${esc(c?.bio||'')}" placeholder="6-2 · 225 · Texas Tech"></div>
+    <div class="field"><label>Stats — one per line, “Label: Value”</label>
+      <textarea id="f_stats" rows="4" placeholder="Pro Bowls: 6&#10;Career TD: 250+">${esc(statText)}</textarea></div>
+    <div class="field"><label>Note / caption</label>
+      <textarea id="f_note" rows="2" placeholder="Your scouting take">${esc(c?.note||'')}</textarea></div>
+    <div class="actions">
+      ${c ? '<button class="btn ghost danger" id="del">Delete</button>' : ''}
+      <button class="btn ghost" id="cancel">Cancel</button>
+      <button class="btn" id="ok">Save</button>
+    </div>
+  `, root => {
+    const fileEl = root.querySelector('#f_file');
+    let uploaded = null;
+    fileEl.addEventListener('change', async ()=>{
+      const f = fileEl.files[0]; if(!f) return;
+      try{ uploaded = await shrinkImage(f); toast('Photo attached'); }
+      catch(err){ toast('Could not read that image'); }
+    });
+
+    root.querySelector('#ok').onclick = ()=>{
+      const name = root.querySelector('#f_name').value.trim();
+      if(!name){ toast('Give the card a name'); return; }
+      const stats = root.querySelector('#f_stats').value.split('\n')
+        .map(l=>l.trim()).filter(Boolean)
+        .map(l=>{ const i = l.indexOf(':');
+          return i<0 ? {k:l, v:''} : {k:l.slice(0,i).trim(), v:l.slice(i+1).trim()}; });
+
+      const data = {
+        name,
+        team: root.querySelector('#f_team').value,
+        pos:  root.querySelector('#f_pos').value.trim().toUpperCase(),
+        jersey: root.querySelector('#f_jersey').value.trim(),
+        photo: uploaded || root.querySelector('#f_photo').value.trim() || null,
+        bio:  root.querySelector('#f_bio').value.trim(),
+        note: root.querySelector('#f_note').value.trim(),
+        stats
+      };
+
+      if(c){ Object.assign(c, data); }
+      else{
+        const nid = uid('c_');
+        const nextNo = Object.keys(state.cards).length + 1;
+        state.cards[nid] = {id:nid, no:nextNo, espnId:null, honors:'', live:null, ...data};
+        if(state.active !== 'ALL'){
+          const d = state.decks.find(x=>x.id===state.active);
+          if(d) d.cards.push(nid);
+        }
+      }
+      closeModal(); save(); render();
+      toast(c ? 'Card updated' : 'Card added');
+    };
+
+    root.querySelector('#cancel').onclick = closeModal;
+    const delBtn = root.querySelector('#del');
+    if(delBtn) delBtn.onclick = ()=>{
+      if(!confirm(`Delete “${c.name}”? This can't be undone.`)) return;
+      delete state.cards[c.id];
+      state.decks.forEach(d => d.cards = d.cards.filter(x=>x!==c.id));
+      closeModal(); save(); render();
+      toast('Card deleted');
+    };
+  });
+}
+
+/* Downscale uploads so localStorage doesn't blow its quota. */
+function shrinkImage(file, max = 640){
+  return new Promise((resolve, reject)=>{
+    const fr = new FileReader();
+    fr.onerror = reject;
+    fr.onload = ()=>{
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = ()=>{
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const cv = document.createElement('canvas');
+        cv.width  = Math.round(img.width  * scale);
+        cv.height = Math.round(img.height * scale);
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        resolve(cv.toDataURL('image/jpeg', 0.82));
+      };
+      img.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
+/* ============================================================
+   9. LIVE REFRESH — stats + latest news
+   Uses ESPN's public endpoints. Entirely optional: if the
+   network, CORS or a firewall says no, the card keeps its
+   bundled content and offers a news search link instead.
+   ============================================================ */
+async function refreshCard(id, btn){
+  const c = state.cards[id];
+  if(!c) return;
+  btn.classList.add('busy');
+  btn.textContent = '⟳ …';
+
+  try{
+    if(!c.espnId) c.espnId = await lookupEspnId(c.name);
+    if(!c.espnId) throw new Error('no-id');
+
+    const r = await fetch(
+      `https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/${c.espnId}/overview`,
+      {headers:{'Accept':'application/json'}});
+    if(!r.ok) throw new Error('http-' + r.status);
+    const data = await r.json();
+
+    const live = extractLive(data);
+    if(!live.stats && !live.news) throw new Error('empty');
+    c.live = {...(c.live||{}), ...live};
+    save(); render();
+    toast('Updated ' + c.name);
+  }catch(err){
+    console.warn('Live refresh unavailable:', err);
+    btn.classList.remove('busy');
+    btn.textContent = '⟳ Refresh';
+    toast('Live data unavailable — using the card');
+  }
+}
+
+/* Pull stats + a headline out of ESPN's payload. Their shape shifts
+   between endpoints and positions, so this stays deliberately loose:
+   anything it can't find simply doesn't get replaced on the card. */
+function extractLive(data){
+  const live = {};
+  if(!data || typeof data !== 'object') return live;
+
+  // stats — labels and values often sit at different depths
+  const root = data.statistics ||
+    deepFind(data, n => ((n.labels || n.names) && (n.splits || n.stats)) ? n : null);
+  if(root){
+    const labels = root.labels || root.names || root.displayNames || [];
+    const vals   = root.splits?.stats || root.splits?.[0]?.stats || root.stats || [];
+    if(labels.length && vals.length){
+      live.stats = labels.slice(0,5).map((k,i)=>({
+        k: String(k).toUpperCase(), v: String(vals[i] ?? '—')
+      }));
+    }
+  }
+
+  // news — first node that reads like a headline
+  const item = deepFind(data, n => {
+    const t = n.description || n.headline;
+    return (typeof t === 'string' && t.length > 25) ? n : null;
+  });
+  if(item){
+    const text = String(item.description || item.headline);
+    live.news = {
+      text: text.length > 200 ? text.slice(0,197).trimEnd() + '…' : text,
+      src : 'ESPN · ' + (item.published
+        ? new Date(item.published).toLocaleDateString(undefined,{month:'short',day:'numeric'})
+        : 'latest')
+    };
+  }
+  return live;
+}
+
+/* Best-effort name → ESPN id lookup. Tries a couple of known search
+   endpoints and digs the id out of whatever shape comes back. */
+async function lookupEspnId(name){
+  const urls = [
+    'https://site.web.api.espn.com/apis/common/v3/search?limit=5&sport=football&league=nfl&query=',
+    'https://site.api.espn.com/apis/common/v3/search?limit=5&sport=football&league=nfl&query='
+  ];
+  for(const base of urls){
+    try{
+      const r = await fetch(base + encodeURIComponent(name));
+      if(!r.ok) continue;
+      const id = deepFind(await r.json(), node => {
+        const type = String(node.type || '').toLowerCase();
+        const uid  = String(node.uid || '');
+        if(type === 'athlete' || type === 'player' || /~a:\d+/.test(uid)){
+          const m = uid.match(/~a:(\d+)/);
+          return m ? m[1] : (node.id ? String(node.id) : null);
+        }
+        return null;
+      });
+      if(id) return id;
+    }catch(e){ /* try the next one */ }
+  }
+  return null;
+}
+
+/* Walk an unknown JSON shape and return the first node `pick` likes. */
+function deepFind(obj, pick, depth = 0){
+  if(!obj || typeof obj !== 'object' || depth > 7) return null;
+  if(Array.isArray(obj)){
+    for(const v of obj){ const r = deepFind(v, pick, depth+1); if(r) return r; }
+    return null;
+  }
+  const hit = pick(obj);
+  if(hit) return hit;
+  for(const k in obj){ const r = deepFind(obj[k], pick, depth+1); if(r) return r; }
+  return null;
+}
+
+/* A headshot 404'd — most likely our bundled id is stale. Try to resolve
+   the real one from the player's name, once, then remember it. */
+async function photoFail(img, id){
+  const silo = img.nextElementSibling;
+  img.hidden = true;
+  if(silo) silo.hidden = false;
+
+  const c = state.cards[id];
+  if(!c || c.photo || c.healed) return;
+  c.healed = true;                       // never loop on this card again
+
+  const found = await lookupEspnId(c.name);
+  if(!found || found === c.espnId) { save(); return; }
+
+  c.espnId = found; save();
+  const url = photoURL(c);
+  if(!url) return;
+  img.onload = () => { img.hidden = false; if(silo) silo.hidden = true; };
+  img.src = url;
+}
+
+/* ============================================================
+   9b. IMPORT THE LEAGUE
+   Pulls every roster from ESPN's public endpoints once, caches the
+   headshots on this device, and never asks the network again. This is
+   the same job scripts/bake-cards.mjs does, run from the app instead
+   of a terminal.
+   ============================================================ */
+const ESPN = {
+  site: 'https://site.api.espn.com/apis/site/v2/sports/football/nfl',
+  core: 'https://sports.core.api.espn.com/v2/sports/football/leagues/nfl',
+  cdn : 'https://a.espncdn.com/combiner/i?img=/i/headshots/nfl/players/full'
+};
+
+/* Skill players and pass rushers make better cards than guards. */
+const POS_RANK = ['QB','RB','WR','TE','FB','DE','EDGE','LB','OLB','ILB','MLB',
+                  'CB','S','FS','SS','DT','NT','K','P','OT','G','C','LS'];
+
+let importAbort = false;
+
+async function grab(url){
+  const r = await fetch(url, {headers:{accept:'application/json'}});
+  if(!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+/** Run tasks with a ceiling on how many are in flight. */
+async function pool(items, limit, fn){
+  const out = new Array(items.length);
+  let next = 0;
+  await Promise.all(Array.from({length: Math.min(limit, items.length)}, async () => {
+    while(next < items.length && !importAbort){
+      const i = next++;
+      try{ out[i] = await fn(items[i], i); }catch(e){ out[i] = null; }
+    }
+  }));
+  return out;
+}
+
+async function fetchTeams(){
+  const j = await grab(`${ESPN.site}/teams`);
+  return (j?.sports?.[0]?.leagues?.[0]?.teams ?? [])
+    .map(t => t.team).filter(t => t?.abbreviation)
+    .map(t => ({
+      id: String(t.id), abbrev: t.abbreviation.toUpperCase(),
+      name: t.name || t.displayName, location: t.location || '',
+      c1: t.color ? `#${t.color}` : null, c2: t.alternateColor ? `#${t.alternateColor}` : null
+    }));
+}
+
+async function fetchRoster(team, perTeam){
+  const j = await grab(`${ESPN.site}/teams/${team.abbrev.toLowerCase()}/roster`);
+  const groups = Array.isArray(j?.athletes) ? j.athletes : [];
+  let players = groups
+    .flatMap(g => Array.isArray(g?.items) ? g.items : (g?.id ? [g] : []))
+    .filter(a => a?.id && (a.fullName || a.displayName))
+    .map(a => ({
+      id: `espn_${a.id}`, espnId: String(a.id),
+      name: a.fullName || a.displayName, team: team.abbrev,
+      pos: (a.position?.abbreviation || '').toUpperCase(),
+      jersey: a.jersey ?? '',
+      photoRemote: a.headshot?.href || `${ESPN.cdn}/${a.id}.png&w=350&h=254`,
+      bio: [a.displayHeight, a.displayWeight, a.college?.name].filter(Boolean).join(' · '),
+      stats: [
+        ['Age', a.age],
+        ['Experience', a.experience?.years != null
+          ? (a.experience.years === 0 ? 'Rookie' : `${a.experience.years} yrs`) : null],
+        ['College', a.college?.name]
+      ].filter(([,v]) => v != null && v !== '').map(([k,v]) => ({k, v:String(v)}))
+    }))
+    .filter(p => p.pos);
+
+  if(perTeam > 0){
+    const rank = p => { const i = POS_RANK.indexOf(p.pos); return i === -1 ? 99 : i; };
+    players.sort((a,b) => rank(a) - rank(b));
+    players = players.slice(0, perTeam);
+  }
+  return players;
+}
+
+/** Coaches sit behind $ref links, and many have no headshot at all. */
+async function fetchCoaches(team, year){
+  const idx = await grab(`${ESPN.core}/seasons/${year}/teams/${team.id}/coaches`)
+    .catch(() => null);
+  const refs = (idx?.items ?? []).map(i => i.$ref).filter(Boolean).slice(0, 1);
+  const people = await pool(refs, 1, ref => grab(ref.replace(/^http:/, 'https:')));
+  return people.filter(Boolean).map(c => {
+    const name = [c.firstName, c.lastName].filter(Boolean).join(' ') || c.displayName;
+    if(!name) return null;
+    return {
+      id: `coach_${c.id ?? team.abbrev}`, espnId: c.id ? String(c.id) : null,
+      name, team: team.abbrev, pos: 'HC', jersey: '',
+      photoRemote: c.headshot?.href || null,
+      bio: `Head Coach · ${team.location} ${team.name}`.trim(),
+      stats: c.experience?.years != null ? [{k:'Experience', v:`${c.experience.years} yrs`}] : []
+    };
+  }).filter(Boolean);
+}
+
+/** Cache one headshot as a blob. Returns true if it landed on the device. */
+async function cachePhoto(card){
+  const url = card.espnId ? `${ESPN.cdn}/${card.espnId}.png&w=350&h=254` : card.photoRemote;
+  if(!url || !card.espnId) return false;
+  try{
+    const r = await fetch(url);
+    if(!r.ok) return false;
+    const blob = await r.blob();
+    if(blob.size < 512) return false;          // ESPN's "no photo" placeholder
+    await vaultPut(card.espnId, blob);
+    return true;
+  }catch(e){ return false; }                   // CORS or offline — keep the remote URL
+}
+
+async function importLeague({perTeam = 16, withPhotos = true}, report){
+  importAbort = false;
+  const year = new Date().getFullYear();
+
+  report('Asking ESPN for the league…', 0);
+  const teams = await fetchTeams();
+  if(!teams.length) throw new Error('no-teams');
+
+  const merged = [];
+  let done = 0;
+  await pool(teams, 4, async t => {
+    const [players, staff] = await Promise.all([
+      fetchRoster(t, perTeam).catch(() => []),
+      fetchCoaches(t, year).catch(() => [])
+    ]);
+    merged.push(...players, ...staff);
+    report(`Rosters — ${++done} of ${teams.length} teams`, (done / teams.length) * 45);
+  });
+  if(importAbort) throw new Error('cancelled');
+  if(!merged.length) throw new Error('no-players');
+
+  // ESPN's colours sometimes pick a light primary that makes the pennant
+  // unreadable, so we only take them for teams we don't already style.
+  teams.forEach(t => { if(!TEAMS[t.abbrev] && t.c1 && t.c2) TEAMS[t.abbrev] = [t.name, t.c1, t.c2]; });
+
+  let cached = 0;
+  if(withPhotos){
+    let p = 0;
+    await pool(merged, 6, async card => {
+      if(await cachePhoto(card)) cached++;
+      if(++p % 5 === 0 || p === merged.length)
+        report(`Photos — ${p} of ${merged.length}`, 45 + (p / merged.length) * 50);
+    });
+    if(importAbort) throw new Error('cancelled');
+    await loadVault();
+  }
+
+  report('Filing the cards…', 97);
+
+  // Keep the cards you made yourself; replace the rest with the real league.
+  const mine = {};
+  Object.values(state.cards).forEach(c => { if(String(c.id).startsWith('c_')) mine[c.id] = c; });
+
+  const prev = {};
+  Object.values(state.cards).forEach(c => { prev[String(c.name).toLowerCase()] = c; });
+
+  const byName = {};
+  const fresh = {};
+  merged.forEach((c, i) => {
+    const was = prev[c.name.toLowerCase()];
+    fresh[c.id] = {
+      ...c, no: i + 1, live: null, photo: null,
+      honors: was?.honors || '', note: was?.note || ''   // keep hand-written flavour
+    };
+    byName[c.name.toLowerCase()] = c.id;
+  });
+
+  // follow decks across by name so your stacks survive the swap
+  state.decks = state.decks.map(d => ({
+    ...d,
+    cards: [...new Set((d.cards || []).map(old =>
+      mine[old] ? old : (byName[String(state.cards[old]?.name).toLowerCase()] || null)
+    ).filter(Boolean))]
+  }));
+
+  state.cards  = {...fresh, ...mine};
+  state.flipped = {};
+  state.stamp  = `espn:${merged.length}`;
+  save();
+  return {cards: merged.length, teams: teams.length, cached};
+}
+
+function openImport(){
+  modal(`
+    <h3>Import the league</h3>
+    <p class="hint" style="margin:-4px 0 14px">
+      Pulls every roster from ESPN once and stores the headshots on this device.
+      After it finishes, the app stops fetching photos entirely — the only thing
+      that ever touches the network again is the news button.</p>
+    <div class="field">
+      <label>How deep per team</label>
+      <select id="i_depth">
+        <option value="16">16 per team — about 550 cards</option>
+        <option value="24">24 per team — about 800 cards</option>
+        <option value="8">8 per team — about 290 cards</option>
+        <option value="0">Everybody on every roster</option>
+      </select>
+    </div>
+    <label class="deckrow" style="margin-bottom:4px">
+      <input type="checkbox" id="i_photos" checked>
+      <span>Store the photos on this device</span>
+    </label>
+    <p class="hint">Leave this on. Off means cards keep pointing at ESPN's servers
+      and you'll need a connection every time you open the app.</p>
+    <div id="i_prog" hidden>
+      <div class="bar"><i id="i_fill"></i></div>
+      <p class="hint" id="i_msg" style="margin:8px 0 0">Starting…</p>
+    </div>
+    <div class="actions">
+      <button class="btn ghost" id="cancel">Cancel</button>
+      <button class="btn" id="go">Import</button>
+    </div>
+  `, root => {
+    const prog = root.querySelector('#i_prog');
+    const fill = root.querySelector('#i_fill');
+    const msg  = root.querySelector('#i_msg');
+    const go   = root.querySelector('#go');
+    const cancelBtn = root.querySelector('#cancel');
+
+    cancelBtn.onclick = () => { importAbort = true; closeModal(); };
+
+    go.onclick = async () => {
+      const perTeam    = parseInt(root.querySelector('#i_depth').value, 10);
+      const withPhotos = root.querySelector('#i_photos').checked;
+      go.disabled = true; go.textContent = 'Importing…';
+      root.querySelector('#i_depth').disabled = true;
+      prog.hidden = false;
+
+      const report = (text, pct) => { msg.textContent = text; fill.style.width = `${Math.min(100, pct)}%`; };
+
+      try{
+        const r = await importLeague({perTeam, withPhotos}, report);
+        closeModal(); render();
+        toast(`${r.cards} cards from ${r.teams} teams${
+          withPhotos ? ` · ${r.cached} photos stored` : ''}`);
+      }catch(err){
+        console.warn('Import failed:', err);
+        prog.hidden = true;
+        go.disabled = false; go.textContent = 'Try again';
+        root.querySelector('#i_depth').disabled = false;
+        const why = err.message === 'cancelled' ? 'Cancelled.'
+          : 'Could not reach ESPN. Check your connection — the deck you have is untouched.';
+        msg.textContent = why;
+        prog.hidden = false; fill.style.width = '0%';
+      }
+    };
+  });
+}
+
+/* ============================================================
+   10. MENU — import / export / reset
+   ============================================================ */
+function openMenu(){
+  modal(`
+    <h3>Collection</h3>
+    <div class="decklist">
+      <button class="deckrow" id="league" style="text-align:left">
+        <span>🏈 Import the league from ESPN</span><small>once</small></button>
+      <button class="deckrow" id="exp" style="text-align:left">
+        <span>⬇ Export collection</span><small>.json</small></button>
+      <button class="deckrow" id="imp" style="text-align:left">
+        <span>⬆ Import collection</span><small>.json</small></button>
+      <button class="deckrow" id="renameDeck" style="text-align:left">
+        <span>✎ Rename current deck</span></button>
+      <button class="deckrow danger" id="delDeck" style="text-align:left">
+        <span>🗑 Delete current deck</span></button>
+      <button class="deckrow danger" id="reset" style="text-align:left">
+        <span>↺ Reset to starter pack</span></button>
+    </div>
+    <p class="hint" style="margin-top:12px">
+      Everything lives in this browser. Export before you clear your history.</p>
+    <div class="actions"><button class="btn ghost" id="cancel">Close</button></div>
+  `, root => {
+    root.querySelector('#cancel').onclick = closeModal;
+    root.querySelector('#league').onclick = ()=>{ closeModal(); openImport(); };
+
+    root.querySelector('#exp').onclick = ()=>{
+      const blob = new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'gridiron-collection.json';
+      a.click(); URL.revokeObjectURL(a.href);
+      closeModal(); toast('Exported');
+    };
+
+    root.querySelector('#imp').onclick = ()=>{
+      const inp = document.createElement('input');
+      inp.type = 'file'; inp.accept = 'application/json';
+      inp.onchange = ()=>{
+        const f = inp.files[0]; if(!f) return;
+        const fr = new FileReader();
+        fr.onload = ()=>{
+          try{
+            const s = JSON.parse(fr.result);
+            if(!s.cards || !s.decks) throw new Error('shape');
+            state = {flipped:{}, active:'ALL', ...s};
+            closeModal(); save(); render(); toast('Collection imported');
+          }catch(e){ toast('That file did not look right'); }
+        };
+        fr.readAsText(f);
+      };
+      inp.click();
+    };
+
+    root.querySelector('#renameDeck').onclick = ()=>{
+      if(state.active === 'ALL'){ toast('Pick a deck first'); return; }
+      const d = state.decks.find(x=>x.id===state.active);
+      const nm = prompt('Rename deck', d.name);
+      if(nm){ d.name = nm.trim().slice(0,40); save(); render(); }
+      closeModal();
+    };
+
+    root.querySelector('#delDeck').onclick = ()=>{
+      if(state.active === 'ALL'){ toast('Pick a deck first'); return; }
+      const d = state.decks.find(x=>x.id===state.active);
+      if(!confirm(`Delete the deck “${d.name}”? The cards themselves stay.`)) return;
+      state.decks = state.decks.filter(x=>x.id!==state.active);
+      state.active = 'ALL';
+      closeModal(); save(); render(); toast('Deck deleted');
+    };
+
+    root.querySelector('#reset').onclick = async ()=>{
+      if(!confirm('Reset everything back to the starter pack? Your custom cards, decks and cached photos will be lost.')) return;
+      localStorage.removeItem(KEY);
+      try{ await vaultClear(); }catch(e){ /* nothing cached yet */ }
+      PHOTOS.forEach(u => URL.revokeObjectURL(u)); PHOTOS.clear();
+      state = load();
+      closeModal(); save(); render(); toast('Back to the starter pack');
+    };
+  });
+}
+
+/* ============================================================
+   11. MODAL PLUMBING
+   ============================================================ */
+function modal(html, setup){
+  closeModal();
+  const scrim = document.createElement('div');
+  scrim.className = 'scrim';
+  scrim.innerHTML = `<div class="sheet" role="dialog" aria-modal="true">${html}</div>`;
+  scrim.addEventListener('click', e => { if(e.target === scrim) closeModal(); });
+  document.body.appendChild(scrim);
+  setup && setup(scrim.querySelector('.sheet'));
+  const first = scrim.querySelector('input,select,textarea,button');
+  first && first.focus({preventScroll:true});
+}
+function closeModal(){ document.querySelectorAll('.scrim').forEach(s=>s.remove()); }
+document.addEventListener('keydown', e => { if(e.key === 'Escape') closeModal(); });
+
+/* ============================================================
+   12. GO
+   ============================================================ */
+/* Mount the cached headshots BEFORE the first paint. Rendering first would
+   fire a round of requests at ESPN for photos we already have on this
+   device — which is the whole thing we're trying to avoid. The race is a
+   backstop so a wedged IndexedDB can never leave the screen blank. */
+Promise.race([loadVault(), new Promise(r => setTimeout(r, 1500))])
+  .then(() => { render(); save(); });
+</script>
+</body>
+</html>
