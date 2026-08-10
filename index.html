@@ -152,7 +152,11 @@ input,select,textarea{font:inherit}
   filter:saturate(.92) contrast(1.04);
 }
 .photo img[hidden]{display:none}
-/* fallback silhouette when no/blocked photo */
+/* fallback silhouette when no/blocked photo.
+   [hidden] needs saying out loud — the class sets display:grid, which
+   outranks the UA stylesheet's [hidden]{display:none} and would leave the
+   fallback painted on top of a perfectly good photo. */
+.silo[hidden]{display:none}
 .silo{
   position:absolute;inset:0;display:grid;place-items:center;
   background:
@@ -323,6 +327,15 @@ table.stats td:last-child{text-align:right;font-weight:700;font-variant-numeric:
 .deckrow input[type=checkbox]{width:17px;height:17px;accent-color:var(--accent);flex:none}
 .deckrow span{flex:1;font-size:14px}
 .deckrow small{font-size:11px;color:#847a6a;font-variant-numeric:tabular-nums}
+
+.bar{
+  height:6px;border-radius:999px;background:#161412;overflow:hidden;
+  border:1px solid #3a332b;margin-top:14px;
+}
+.bar i{
+  display:block;height:100%;width:0;border-radius:999px;background:var(--accent);
+  transition:width .3s ease;
+}
 
 .toast{
   position:fixed;left:50%;bottom:calc(22px + var(--safe-b));transform:translateX(-50%);
@@ -614,7 +627,10 @@ function load(){
     stamp: STAMP
   };
 
-  return (BAKED && saved.stamp !== STAMP) ? adoptBaked(saved) : saved;
+  // An in-app league import is newer and more specific than any baked file
+  // sitting on disk — never let the bake clobber it.
+  const imported = String(saved.stamp || '').startsWith('espn:');
+  return (BAKED && !imported && saved.stamp !== STAMP) ? adoptBaked(saved) : saved;
 }
 
 /* A fresh bake landed. Swap in the new deck, keep every card you made
@@ -674,9 +690,15 @@ function initials(name){
   return String(name||'?').split(/\s+/).filter(Boolean).slice(0,2)
     .map(w=>w[0]).join('').toUpperCase();
 }
+/* Photos, in order of preference:
+   1. one you set yourself (upload or pasted URL)
+   2. a headshot cached on this device by the league import — no network
+   3. the remote URL, only until you've imported                        */
 function photoURL(c){
   if(c.photo) return c.photo;
-  if(c.espnId) return `https://a.espncdn.com/i/headshots/nfl/players/full/${c.espnId}.png`;
+  if(c.espnId && PHOTOS.has(c.espnId)) return PHOTOS.get(c.espnId);
+  if(c.photoRemote) return c.photoRemote;
+  if(c.espnId) return `${ESPN.cdn}/${c.espnId}.png&w=350&h=254`;
   return null;
 }
 function newsSearchURL(c){
@@ -689,6 +711,55 @@ function toast(msg){
   el.className = 'toast'; el.textContent = msg;
   document.body.appendChild(el);
   setTimeout(()=>el.remove(), 2400);
+}
+
+/* ============================================================
+   4b. PHOTO VAULT (IndexedDB)
+   Headshots are far too big for localStorage, so cached images live in
+   IndexedDB as blobs. On boot we mint an object URL for each one, and
+   from then on every photo on screen is served from this device.
+   ============================================================ */
+const VAULT = {db:'gridiron', store:'photos', version:1};
+const PHOTOS = new Map();          // espnId -> blob: URL
+
+function openVault(){
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(VAULT.db, VAULT.version);
+    r.onupgradeneeded = () => {
+      if(!r.result.objectStoreNames.contains(VAULT.store)) r.result.createObjectStore(VAULT.store);
+    };
+    r.onsuccess = () => res(r.result);
+    r.onerror   = () => rej(r.error);
+  });
+}
+
+function vaultTx(mode, fn){
+  return openVault().then(db => new Promise((res, rej) => {
+    const tx = db.transaction(VAULT.store, mode);
+    const out = fn(tx.objectStore(VAULT.store));
+    tx.oncomplete = () => res(out?.result ?? out);
+    tx.onerror    = () => rej(tx.error);
+  }));
+}
+
+const vaultPut   = (k, blob) => vaultTx('readwrite', s => s.put(blob, k));
+const vaultClear = ()        => vaultTx('readwrite', s => s.clear());
+
+/** Pull every cached headshot into memory as object URLs. */
+async function loadVault(){
+  try{
+    const db = await openVault();
+    const [keys, vals] = await Promise.all([
+      new Promise((res,rej)=>{ const q = db.transaction(VAULT.store).objectStore(VAULT.store).getAllKeys();
+        q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }),
+      new Promise((res,rej)=>{ const q = db.transaction(VAULT.store).objectStore(VAULT.store).getAll();
+        q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); })
+    ]);
+    PHOTOS.forEach(u => URL.revokeObjectURL(u));
+    PHOTOS.clear();
+    keys.forEach((k, i) => { if(vals[i]) PHOTOS.set(String(k), URL.createObjectURL(vals[i])); });
+  }catch(e){ console.warn('Photo vault unavailable:', e); }
+  return PHOTOS.size;
 }
 
 /* ============================================================
@@ -1128,12 +1199,265 @@ async function photoFail(img, id){
 }
 
 /* ============================================================
+   9b. IMPORT THE LEAGUE
+   Pulls every roster from ESPN's public endpoints once, caches the
+   headshots on this device, and never asks the network again. This is
+   the same job scripts/bake-cards.mjs does, run from the app instead
+   of a terminal.
+   ============================================================ */
+const ESPN = {
+  site: 'https://site.api.espn.com/apis/site/v2/sports/football/nfl',
+  core: 'https://sports.core.api.espn.com/v2/sports/football/leagues/nfl',
+  cdn : 'https://a.espncdn.com/combiner/i?img=/i/headshots/nfl/players/full'
+};
+
+/* Skill players and pass rushers make better cards than guards. */
+const POS_RANK = ['QB','RB','WR','TE','FB','DE','EDGE','LB','OLB','ILB','MLB',
+                  'CB','S','FS','SS','DT','NT','K','P','OT','G','C','LS'];
+
+let importAbort = false;
+
+async function grab(url){
+  const r = await fetch(url, {headers:{accept:'application/json'}});
+  if(!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+/** Run tasks with a ceiling on how many are in flight. */
+async function pool(items, limit, fn){
+  const out = new Array(items.length);
+  let next = 0;
+  await Promise.all(Array.from({length: Math.min(limit, items.length)}, async () => {
+    while(next < items.length && !importAbort){
+      const i = next++;
+      try{ out[i] = await fn(items[i], i); }catch(e){ out[i] = null; }
+    }
+  }));
+  return out;
+}
+
+async function fetchTeams(){
+  const j = await grab(`${ESPN.site}/teams`);
+  return (j?.sports?.[0]?.leagues?.[0]?.teams ?? [])
+    .map(t => t.team).filter(t => t?.abbreviation)
+    .map(t => ({
+      id: String(t.id), abbrev: t.abbreviation.toUpperCase(),
+      name: t.name || t.displayName, location: t.location || '',
+      c1: t.color ? `#${t.color}` : null, c2: t.alternateColor ? `#${t.alternateColor}` : null
+    }));
+}
+
+async function fetchRoster(team, perTeam){
+  const j = await grab(`${ESPN.site}/teams/${team.abbrev.toLowerCase()}/roster`);
+  const groups = Array.isArray(j?.athletes) ? j.athletes : [];
+  let players = groups
+    .flatMap(g => Array.isArray(g?.items) ? g.items : (g?.id ? [g] : []))
+    .filter(a => a?.id && (a.fullName || a.displayName))
+    .map(a => ({
+      id: `espn_${a.id}`, espnId: String(a.id),
+      name: a.fullName || a.displayName, team: team.abbrev,
+      pos: (a.position?.abbreviation || '').toUpperCase(),
+      jersey: a.jersey ?? '',
+      photoRemote: a.headshot?.href || `${ESPN.cdn}/${a.id}.png&w=350&h=254`,
+      bio: [a.displayHeight, a.displayWeight, a.college?.name].filter(Boolean).join(' · '),
+      stats: [
+        ['Age', a.age],
+        ['Experience', a.experience?.years != null
+          ? (a.experience.years === 0 ? 'Rookie' : `${a.experience.years} yrs`) : null],
+        ['College', a.college?.name]
+      ].filter(([,v]) => v != null && v !== '').map(([k,v]) => ({k, v:String(v)}))
+    }))
+    .filter(p => p.pos);
+
+  if(perTeam > 0){
+    const rank = p => { const i = POS_RANK.indexOf(p.pos); return i === -1 ? 99 : i; };
+    players.sort((a,b) => rank(a) - rank(b));
+    players = players.slice(0, perTeam);
+  }
+  return players;
+}
+
+/** Coaches sit behind $ref links, and many have no headshot at all. */
+async function fetchCoaches(team, year){
+  const idx = await grab(`${ESPN.core}/seasons/${year}/teams/${team.id}/coaches`)
+    .catch(() => null);
+  const refs = (idx?.items ?? []).map(i => i.$ref).filter(Boolean).slice(0, 1);
+  const people = await pool(refs, 1, ref => grab(ref.replace(/^http:/, 'https:')));
+  return people.filter(Boolean).map(c => {
+    const name = [c.firstName, c.lastName].filter(Boolean).join(' ') || c.displayName;
+    if(!name) return null;
+    return {
+      id: `coach_${c.id ?? team.abbrev}`, espnId: c.id ? String(c.id) : null,
+      name, team: team.abbrev, pos: 'HC', jersey: '',
+      photoRemote: c.headshot?.href || null,
+      bio: `Head Coach · ${team.location} ${team.name}`.trim(),
+      stats: c.experience?.years != null ? [{k:'Experience', v:`${c.experience.years} yrs`}] : []
+    };
+  }).filter(Boolean);
+}
+
+/** Cache one headshot as a blob. Returns true if it landed on the device. */
+async function cachePhoto(card){
+  const url = card.espnId ? `${ESPN.cdn}/${card.espnId}.png&w=350&h=254` : card.photoRemote;
+  if(!url || !card.espnId) return false;
+  try{
+    const r = await fetch(url);
+    if(!r.ok) return false;
+    const blob = await r.blob();
+    if(blob.size < 512) return false;          // ESPN's "no photo" placeholder
+    await vaultPut(card.espnId, blob);
+    return true;
+  }catch(e){ return false; }                   // CORS or offline — keep the remote URL
+}
+
+async function importLeague({perTeam = 16, withPhotos = true}, report){
+  importAbort = false;
+  const year = new Date().getFullYear();
+
+  report('Asking ESPN for the league…', 0);
+  const teams = await fetchTeams();
+  if(!teams.length) throw new Error('no-teams');
+
+  const merged = [];
+  let done = 0;
+  await pool(teams, 4, async t => {
+    const [players, staff] = await Promise.all([
+      fetchRoster(t, perTeam).catch(() => []),
+      fetchCoaches(t, year).catch(() => [])
+    ]);
+    merged.push(...players, ...staff);
+    report(`Rosters — ${++done} of ${teams.length} teams`, (done / teams.length) * 45);
+  });
+  if(importAbort) throw new Error('cancelled');
+  if(!merged.length) throw new Error('no-players');
+
+  // ESPN's colours sometimes pick a light primary that makes the pennant
+  // unreadable, so we only take them for teams we don't already style.
+  teams.forEach(t => { if(!TEAMS[t.abbrev] && t.c1 && t.c2) TEAMS[t.abbrev] = [t.name, t.c1, t.c2]; });
+
+  let cached = 0;
+  if(withPhotos){
+    let p = 0;
+    await pool(merged, 6, async card => {
+      if(await cachePhoto(card)) cached++;
+      if(++p % 5 === 0 || p === merged.length)
+        report(`Photos — ${p} of ${merged.length}`, 45 + (p / merged.length) * 50);
+    });
+    if(importAbort) throw new Error('cancelled');
+    await loadVault();
+  }
+
+  report('Filing the cards…', 97);
+
+  // Keep the cards you made yourself; replace the rest with the real league.
+  const mine = {};
+  Object.values(state.cards).forEach(c => { if(String(c.id).startsWith('c_')) mine[c.id] = c; });
+
+  const prev = {};
+  Object.values(state.cards).forEach(c => { prev[String(c.name).toLowerCase()] = c; });
+
+  const byName = {};
+  const fresh = {};
+  merged.forEach((c, i) => {
+    const was = prev[c.name.toLowerCase()];
+    fresh[c.id] = {
+      ...c, no: i + 1, live: null, photo: null,
+      honors: was?.honors || '', note: was?.note || ''   // keep hand-written flavour
+    };
+    byName[c.name.toLowerCase()] = c.id;
+  });
+
+  // follow decks across by name so your stacks survive the swap
+  state.decks = state.decks.map(d => ({
+    ...d,
+    cards: [...new Set((d.cards || []).map(old =>
+      mine[old] ? old : (byName[String(state.cards[old]?.name).toLowerCase()] || null)
+    ).filter(Boolean))]
+  }));
+
+  state.cards  = {...fresh, ...mine};
+  state.flipped = {};
+  state.stamp  = `espn:${merged.length}`;
+  save();
+  return {cards: merged.length, teams: teams.length, cached};
+}
+
+function openImport(){
+  modal(`
+    <h3>Import the league</h3>
+    <p class="hint" style="margin:-4px 0 14px">
+      Pulls every roster from ESPN once and stores the headshots on this device.
+      After it finishes, the app stops fetching photos entirely — the only thing
+      that ever touches the network again is the news button.</p>
+    <div class="field">
+      <label>How deep per team</label>
+      <select id="i_depth">
+        <option value="16">16 per team — about 550 cards</option>
+        <option value="24">24 per team — about 800 cards</option>
+        <option value="8">8 per team — about 290 cards</option>
+        <option value="0">Everybody on every roster</option>
+      </select>
+    </div>
+    <label class="deckrow" style="margin-bottom:4px">
+      <input type="checkbox" id="i_photos" checked>
+      <span>Store the photos on this device</span>
+    </label>
+    <p class="hint">Leave this on. Off means cards keep pointing at ESPN's servers
+      and you'll need a connection every time you open the app.</p>
+    <div id="i_prog" hidden>
+      <div class="bar"><i id="i_fill"></i></div>
+      <p class="hint" id="i_msg" style="margin:8px 0 0">Starting…</p>
+    </div>
+    <div class="actions">
+      <button class="btn ghost" id="cancel">Cancel</button>
+      <button class="btn" id="go">Import</button>
+    </div>
+  `, root => {
+    const prog = root.querySelector('#i_prog');
+    const fill = root.querySelector('#i_fill');
+    const msg  = root.querySelector('#i_msg');
+    const go   = root.querySelector('#go');
+    const cancelBtn = root.querySelector('#cancel');
+
+    cancelBtn.onclick = () => { importAbort = true; closeModal(); };
+
+    go.onclick = async () => {
+      const perTeam    = parseInt(root.querySelector('#i_depth').value, 10);
+      const withPhotos = root.querySelector('#i_photos').checked;
+      go.disabled = true; go.textContent = 'Importing…';
+      root.querySelector('#i_depth').disabled = true;
+      prog.hidden = false;
+
+      const report = (text, pct) => { msg.textContent = text; fill.style.width = `${Math.min(100, pct)}%`; };
+
+      try{
+        const r = await importLeague({perTeam, withPhotos}, report);
+        closeModal(); render();
+        toast(`${r.cards} cards from ${r.teams} teams${
+          withPhotos ? ` · ${r.cached} photos stored` : ''}`);
+      }catch(err){
+        console.warn('Import failed:', err);
+        prog.hidden = true;
+        go.disabled = false; go.textContent = 'Try again';
+        root.querySelector('#i_depth').disabled = false;
+        const why = err.message === 'cancelled' ? 'Cancelled.'
+          : 'Could not reach ESPN. Check your connection — the deck you have is untouched.';
+        msg.textContent = why;
+        prog.hidden = false; fill.style.width = '0%';
+      }
+    };
+  });
+}
+
+/* ============================================================
    10. MENU — import / export / reset
    ============================================================ */
 function openMenu(){
   modal(`
     <h3>Collection</h3>
     <div class="decklist">
+      <button class="deckrow" id="league" style="text-align:left">
+        <span>🏈 Import the league from ESPN</span><small>once</small></button>
       <button class="deckrow" id="exp" style="text-align:left">
         <span>⬇ Export collection</span><small>.json</small></button>
       <button class="deckrow" id="imp" style="text-align:left">
@@ -1150,6 +1474,7 @@ function openMenu(){
     <div class="actions"><button class="btn ghost" id="cancel">Close</button></div>
   `, root => {
     root.querySelector('#cancel').onclick = closeModal;
+    root.querySelector('#league').onclick = ()=>{ closeModal(); openImport(); };
 
     root.querySelector('#exp').onclick = ()=>{
       const blob = new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
@@ -1196,9 +1521,11 @@ function openMenu(){
       closeModal(); save(); render(); toast('Deck deleted');
     };
 
-    root.querySelector('#reset').onclick = ()=>{
-      if(!confirm('Reset everything back to the starter pack? Your custom cards and decks will be lost.')) return;
+    root.querySelector('#reset').onclick = async ()=>{
+      if(!confirm('Reset everything back to the starter pack? Your custom cards, decks and cached photos will be lost.')) return;
       localStorage.removeItem(KEY);
+      try{ await vaultClear(); }catch(e){ /* nothing cached yet */ }
+      PHOTOS.forEach(u => URL.revokeObjectURL(u)); PHOTOS.clear();
       state = load();
       closeModal(); save(); render(); toast('Back to the starter pack');
     };
@@ -1225,8 +1552,12 @@ document.addEventListener('keydown', e => { if(e.key === 'Escape') closeModal();
 /* ============================================================
    12. GO
    ============================================================ */
-render();
-save();   // persist the data-source stamp so a re-bake is detected next time
+/* Mount the cached headshots BEFORE the first paint. Rendering first would
+   fire a round of requests at ESPN for photos we already have on this
+   device — which is the whole thing we're trying to avoid. The race is a
+   backstop so a wedged IndexedDB can never leave the screen blank. */
+Promise.race([loadVault(), new Promise(r => setTimeout(r, 1500))])
+  .then(() => { render(); save(); });
 </script>
 </body>
 </html>

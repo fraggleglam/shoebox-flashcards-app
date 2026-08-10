@@ -35,10 +35,24 @@ To put it on the web, drag this folder into Netlify — it's a static page, noth
 - **Search** across names, teams and positions.
 - **Export / import** your whole collection as JSON, from the `⋯` menu.
 
-## Bake the real deck
+## Get the real deck
 
 Out of the box the app runs on a small deck written into `index.html`. To get the real
-thing — every team, real headshots, real bios — run the bake once:
+thing — every team, real headshots, real bios — open the `⋯` menu and pick
+**🏈 Import the league from ESPN**.
+
+It pulls all 32 rosters and coaching staffs, stores every headshot in this browser's
+IndexedDB, and swaps the deck. Choose how deep you want to go (16 per team ≈ 550 cards, or
+everybody on every roster). Cards you made yourself are kept, and your decks follow the
+players across by name.
+
+**After the import the app never fetches a photo again.** Reload it, go offline, get on a
+plane — the deck is on your device. The only thing that ever touches the network from then
+on is the news button, and only when you press it.
+
+### Or from a terminal
+
+Same job, useful for CI and for Netlify builds:
 
 ```bash
 node scripts/bake-cards.mjs
@@ -85,9 +99,14 @@ never was one. Nothing about a failed bake breaks the app.
 
 ## Storage
 
-Everything lives in this browser's `localStorage` under `gridiron.v1`. It survives refreshes
-and restarts, but it is per-browser and per-device — clearing site data wipes it. Export
-from the `⋯` menu before you clean house.
+Card text, decks and your own cards live in `localStorage` under `gridiron.v1`. Headshots are
+far too big for that, so they go in IndexedDB (`gridiron` → `photos`) as blobs, mounted as
+object URLs at startup — before the first paint, so the browser never reaches for a photo it
+already has.
+
+Both survive refreshes and restarts, but they are per-browser and per-device. Clearing site
+data wipes them. Export from the `⋯` menu before you clean house. (Firestore sync is the
+obvious next step here, and would make this paragraph shorter.)
 
 ## Layout
 
