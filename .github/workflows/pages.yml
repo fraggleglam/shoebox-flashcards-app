@@ -1,0 +1,43 @@
+name: Deploy to GitHub Pages
+
+# Publishes the app on every push to main. Deliberately does NOT run
+# scripts/bake-cards.mjs: baking here would put a few hundred NFL/Getty
+# headshots on a public site. Visitors use the in-app league import instead,
+# which caches photos into their own browser.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true      # turns Pages on the first time, so there's no console step
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - name: Deploy
+        id: deploy
+        uses: actions/deploy-pages@v4
