@@ -35,20 +35,53 @@ To put it on the web, drag this folder into Netlify — it's a static page, noth
 - **Search** across names, teams and positions.
 - **Export / import** your whole collection as JSON, from the `⋯` menu.
 
-## Where the photos and news come from
+## Bake the real deck
 
-Photos use ESPN's public headshot CDN. Each card carries a player ID; if one is stale the
-card asks ESPN for the right one, remembers it, and loads the photo from then on. If that
-fails too, you get a clean team-colored card with the player's initials — never a broken
-image.
+Out of the box the app runs on a small deck written into `index.html`. To get the real
+thing — every team, real headshots, real bios — run the bake once:
 
-The **⟳ Refresh** button on the back of a card pulls current stats and a recent headline
-from ESPN's public API. It is strictly a bonus layer: no key, no account, and if the network,
-CORS or a firewall says no, the card keeps the content it shipped with and offers a
-**Search the news →** link instead. Nothing breaks offline.
+```bash
+node scripts/bake-cards.mjs
+```
 
-> The bundled stat lines are a starting point — accolades and career milestones rather than
-> live season numbers. Hit ⟳ for current figures.
+It pulls rosters and coaching staffs from ESPN's public endpoints, downloads the headshots,
+and writes `data/cards.js` plus `data/photos/`. The app picks them up next time you open it.
+Node 18+, no dependencies, no API key, no auth.
+
+```bash
+node scripts/bake-cards.mjs --all          # every player with a headshot, not just 16/team
+node scripts/bake-cards.mjs --per-team 24
+node scripts/bake-cards.mjs --teams kc,sf,phi
+node scripts/bake-cards.mjs --no-photos    # facts only, keep remote image URLs
+```
+
+**After the bake, the app fetches nothing but news.** Photos and bios live on disk. Re-run it
+each season — the app notices the new deck, adopts it, and carries your decks and your
+hand-made cards across by name.
+
+`data/notes.json` holds the hand-written flavour — the "did you know" line and the scouting
+note — keyed by player name. The bake grafts it onto the fetched facts, so re-baking never
+overwrites your voice. Add anyone you like.
+
+### The one thing that stays live
+
+**⟳ Refresh** on the back of a card pulls a recent headline. That is the only runtime network
+call, it happens only when you ask for it, and if it fails the card keeps what it has and
+offers a **Search the news →** link instead. Nothing breaks offline.
+
+### A note on the photos
+
+These are NFL/Getty images. `data/photos/` and `data/cards.js` are gitignored on purpose —
+caching them on your own machine is one thing, but this repo is public and committing a few
+hundred of them is republishing. Netlify re-bakes at deploy time (`netlify.toml`), so
+production still gets the photos without them entering git. Building something private and
+want them committed? Delete those two lines from `.gitignore`.
+
+### If ESPN changes
+
+These endpoints are undocumented and can move without warning. If a bake starts coming back
+empty, the app keeps running on whatever it baked last — and on the built-in deck if there
+never was one. Nothing about a failed bake breaks the app.
 
 ## Storage
 

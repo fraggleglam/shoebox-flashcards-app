@@ -359,6 +359,10 @@ table.stats td:last-child{text-align:right;font-weight:700;font-variant-numeric:
 <main class="grid" id="grid"></main>
 <button class="fab" id="fab" title="New card">+</button>
 
+<!-- Written by scripts/bake-cards.mjs. Absent until you run the bake — that's
+     fine, the app falls back to the small deck built into this file. -->
+<script src="data/cards.js"></script>
+
 <script>
 /* ============================================================
    1. TEAMS
@@ -382,6 +386,15 @@ const TEAMS = {
   TEN:['Titans','#0C2340','#4B92DB'],    WSH:['Commanders','#5A1414','#FFB612'],
   FA: ['Free Agent','#4a4238','#8a8072']
 };
+
+/* The bake also brings back ESPN's team colours. We keep the hand-tuned
+   palette above — it's picked so white type stays readable on the pennant —
+   and only take ESPN's for a team we don't already know about. */
+if(window.GRIDIRON_TEAMS){
+  for(const [ab,t] of Object.entries(window.GRIDIRON_TEAMS)){
+    if(!TEAMS[ab] && t?.c1 && t?.c2) TEAMS[ab] = [t.name || ab, t.c1, t.c2];
+  }
+}
 
 /* ============================================================
    2. SEED DECK
@@ -551,9 +564,12 @@ const SEED = [
 const KEY = 'gridiron.v1';
 const uid = p => p + Math.random().toString(36).slice(2,9);
 
-let state = load();
+/* Where the deck comes from: the baked file if you've run the bake, otherwise
+   the small deck built into this file. */
+const BAKED = Array.isArray(window.GRIDIRON_CARDS) && window.GRIDIRON_CARDS.length > 0;
+const STAMP = BAKED ? 'baked:' + window.GRIDIRON_CARDS.length : 'builtin';
 
-function seedCards(){
+function builtInCards(){
   const cards = {};
   SEED.forEach((r,i) => {
     const id = 'seed_' + i;
@@ -566,21 +582,76 @@ function seedCards(){
   return cards;
 }
 
+function bakedCards(){
+  const cards = {};
+  window.GRIDIRON_CARDS.forEach(c => {
+    if(!c || !c.id || !c.name) return;
+    cards[c.id] = {
+      live:null, honors:'', note:'', photo:null, stats:[], espnId:null,
+      ...c, jersey: c.jersey ?? ''
+    };
+  });
+  return cards;
+}
+
+const defaultCards = () => BAKED ? bakedCards() : builtInCards();
+
 function load(){
+  let saved = null;
   try{
     const raw = localStorage.getItem(KEY);
     if(raw){
       const s = JSON.parse(raw);
-      if(s && s.cards && s.decks) return s;
+      if(s && s.cards && s.decks) saved = s;
     }
   }catch(e){ console.warn('Could not read saved data:', e); }
-  return {
-    cards: seedCards(),
+
+  if(!saved) return {
+    cards: defaultCards(),
     decks: [{id:'d_starter', name:'Starter Pack', cards:[]}],
     active: 'ALL',
-    flipped: {}
+    flipped: {},
+    stamp: STAMP
+  };
+
+  return (BAKED && saved.stamp !== STAMP) ? adoptBaked(saved) : saved;
+}
+
+/* A fresh bake landed. Swap in the new deck, keep every card you made
+   yourself, and follow your decks across by name so the stacks survive. */
+function adoptBaked(saved){
+  const fresh  = bakedCards();
+  const byName = {};
+  Object.values(fresh).forEach(c => { byName[c.name.toLowerCase()] = c.id; });
+
+  const mine = {};
+  Object.values(saved.cards || {}).forEach(c => {
+    if(String(c.id).startsWith('c_')) mine[c.id] = c;
+  });
+
+  const remap = oldId => {
+    if(mine[oldId]) return oldId;
+    const old = saved.cards?.[oldId];
+    return old ? (byName[String(old.name).toLowerCase()] || null) : null;
+  };
+
+  const decks = (saved.decks || []).map(d => ({
+    ...d, cards: [...new Set((d.cards || []).map(remap).filter(Boolean))]
+  }));
+
+  return {
+    cards: {...fresh, ...mine},
+    decks,
+    active: (saved.active === 'ALL' || decks.some(d => d.id === saved.active))
+      ? saved.active : 'ALL',
+    flipped: {},
+    stamp: STAMP
   };
 }
+
+/* Declared after everything load() leans on, so the consts above are
+   initialised by the time it runs. */
+let state = load();
 
 let saveTimer;
 function save(){
@@ -1155,6 +1226,7 @@ document.addEventListener('keydown', e => { if(e.key === 'Escape') closeModal();
    12. GO
    ============================================================ */
 render();
+save();   // persist the data-source stamp so a re-bake is detected next time
 </script>
 </body>
 </html>

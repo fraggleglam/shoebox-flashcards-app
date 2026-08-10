@@ -1,0 +1,8 @@
+# Netlify re-bakes the deck at deploy time, so the photos reach production
+# without ever being committed to this public repo.
+[build]
+  command = "node scripts/bake-cards.mjs"
+  publish = "."
+
+[build.environment]
+  NODE_VERSION = "20"

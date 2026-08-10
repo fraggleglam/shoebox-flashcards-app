@@ -1,0 +1,157 @@
+{
+  "_README": "Hand-written flavour, keyed by player name. bake-cards.mjs grafts these onto the auto-fetched facts, so re-baking never clobbers your voice. Add anyone you like — 'honors' is the DID YOU KNOW line, 'note' is the SCOUTING NOTE box.",
+
+  "Patrick Mahomes": {
+    "honors": "3× Super Bowl champion. Fastest QB to 200 career passing TDs.",
+    "note": "The face of the league — Kansas City's window stays open as long as he's upright."
+  },
+  "Josh Allen": {
+    "honors": "2024 NFL MVP. Buffalo's franchise leader in rushing touchdowns by a quarterback.",
+    "note": "Bulldozer with a cannon. The whole offense is a referendum on his arm."
+  },
+  "Lamar Jackson": {
+    "honors": "Two-time NFL MVP, one of them unanimous. First QB with two 1,000-yard rushing seasons.",
+    "note": "The most dangerous open-field runner to ever play the position."
+  },
+  "Joe Burrow": {
+    "honors": "Led Cincinnati to Super Bowl LVI. Best single-season completion percentage in NFL history.",
+    "note": "Cool as anything in a two-minute drill. Health is the only real question."
+  },
+  "Jalen Hurts": {
+    "honors": "Super Bowl LIX MVP. Holds the record for rushing touchdowns by a QB in a Super Bowl.",
+    "note": "Turned the quarterback sneak into an unstoppable offensive philosophy."
+  },
+  "C.J. Stroud": {
+    "honors": "2023 Offensive Rookie of the Year, with the best rookie passer rating of the modern era.",
+    "note": "Houston's franchise is fully rebuilt around his poise."
+  },
+  "Jayden Daniels": {
+    "honors": "2024 Offensive Rookie of the Year and a Heisman winner. Reached the NFC Championship as a rookie.",
+    "note": "Instantly made the Commanders relevant again. Rare poise for his age."
+  },
+  "Caleb Williams": {
+    "honors": "Heisman winner and No. 1 overall pick. Fewest interceptions by a rookie with 500+ attempts.",
+    "note": "Improviser with a gunslinger streak. Chicago's offense is being built to his shape."
+  },
+  "Brock Purdy": {
+    "honors": "The only 'Mr. Irrelevant' — last pick of the draft — ever to start a Super Bowl.",
+    "note": "The most efficient value contract in football, right up until the extension landed."
+  },
+  "Justin Herbert": {
+    "honors": "Offensive Rookie of the Year, and the fastest player ever to 20,000 career passing yards.",
+    "note": "Prototype arm talent. A run-first system is the new variable."
+  },
+
+  "Ja'Marr Chase": {
+    "honors": "2024 receiving Triple Crown — led the NFL in catches, yards and touchdowns.",
+    "note": "Burrow's college roommate and the most bankable target in football."
+  },
+  "Justin Jefferson": {
+    "honors": "Fastest to 5,000 career receiving yards. Highest yards-per-game average all-time.",
+    "note": "The Griddy is his, but the route running is what scares coordinators."
+  },
+  "CeeDee Lamb": {
+    "honors": "Holds the Cowboys' single-season receptions record. Wears the franchise's legendary No. 88.",
+    "note": "Carries the Dallas passing game whether or not it's convenient."
+  },
+  "Tyreek Hill": {
+    "honors": "Nicknamed 'Cheetah.' Came within 61 yards of the single-season receiving record.",
+    "note": "Still the fastest man in the sport when the track is dry."
+  },
+  "Amon-Ra St. Brown": {
+    "honors": "A fourth-round pick who set the Lions' single-season receptions record.",
+    "note": "The Sun God. Detroit's toughness in wide receiver form."
+  },
+  "Puka Nacua": {
+    "honors": "Holds the NFL rookie records for both receptions and receiving yards.",
+    "note": "A fifth-rounder who broke records nobody expected to fall."
+  },
+
+  "Travis Kelce": {
+    "honors": "Most receiving yards by a tight end in playoff history. Seven straight 1,000-yard seasons.",
+    "note": "The most decorated tight end of his era, on and off the field."
+  },
+  "George Kittle": {
+    "honors": "Once held the single-season receiving yards record for a tight end.",
+    "note": "Blocks like a tackle, runs like a receiver, celebrates like nobody's watching."
+  },
+  "Brock Bowers": {
+    "honors": "Broke the NFL rookie record for receptions by a tight end.",
+    "note": "Instantly the best thing about the Raiders offense."
+  },
+
+  "Saquon Barkley": {
+    "honors": "Ninth player ever to rush for 2,000 yards in a season — then won the Super Bowl.",
+    "note": "The reverse hurdle is now a permanent part of NFL highlight reels."
+  },
+  "Christian McCaffrey": {
+    "honors": "One of only three players with 1,000 rushing and 1,000 receiving yards in the same season.",
+    "note": "When healthy, the most complete offensive weapon in football."
+  },
+  "Derrick Henry": {
+    "honors": "Rushed for 2,027 yards in 2020. Heisman winner. 'King Henry.'",
+    "note": "Still running defenders over well past the age backs are supposed to fall off."
+  },
+  "Bijan Robinson": {
+    "honors": "Doak Walker Award winner and a top-10 pick at a position teams stopped drafting early.",
+    "note": "Atlanta's offense goes exactly as far as he carries it."
+  },
+  "Jahmyr Gibbs": {
+    "honors": "Half of Detroit's 'Sonic and Knuckles' backfield.",
+    "note": "Breakaway speed that turns a four-yard crease into six points."
+  },
+
+  "Myles Garrett": {
+    "honors": "2023 Defensive Player of the Year and the Browns' all-time sack leader.",
+    "note": "A one-man pass rush on a roster that keeps asking him to be exactly that."
+  },
+  "Micah Parsons": {
+    "honors": "Most sacks by any player in his first three NFL seasons since the stat became official.",
+    "note": "Traded in a blockbuster — now terrorizing the NFC North from the other side."
+  },
+  "T.J. Watt": {
+    "honors": "Tied the NFL single-season sack record with 22.5 in just 15 games.",
+    "note": "Forces more fumbles than anyone alive. The Steelers defense begins and ends with him."
+  },
+  "Nick Bosa": {
+    "honors": "Only the second player to win both Defensive Rookie of the Year and Defensive Player of the Year.",
+    "note": "The engine of San Francisco's front four."
+  },
+  "Aidan Hutchinson": {
+    "honors": "Was on a record sack pace in 2024 before a season-ending leg injury.",
+    "note": "Detroit's defensive identity — the comeback is the story to watch."
+  },
+  "Sauce Gardner": {
+    "honors": "Never allowed a touchdown in his college career. First-team All-Pro as a rookie.",
+    "note": "Quarterbacks simply stopped looking at his side of the field."
+  },
+  "Patrick Surtain II": {
+    "honors": "2024 Defensive Player of the Year — the first cornerback to win it since 2009.",
+    "note": "The rare corner good enough to win an award built for pass rushers."
+  },
+
+  "Andy Reid": {
+    "honors": "One of only six coaches with 280+ career wins. Three Super Bowl titles in Kansas City.",
+    "note": "Still the best game-week play designer in football, cheeseburger jokes notwithstanding."
+  },
+  "Kyle Shanahan": {
+    "honors": "His outside-zone scheme is the most copied offensive system of the last decade.",
+    "note": "The league's most imitated play-caller, still hunting the ring."
+  },
+  "Sean McVay": {
+    "honors": "Youngest head coach in modern NFL history — and the youngest ever to win a Super Bowl.",
+    "note": "Spawned an entire generation of thirty-something head coaching hires."
+  },
+  "Dan Campbell": {
+    "honors": "Took Detroit from 3-13-1 to the NFC's No. 1 seed in three seasons.",
+    "note": "The most aggressive fourth-down coach in the league, and the most quotable."
+  },
+  "Mike Tomlin": {
+    "honors": "Has never had a losing season in his entire head coaching career.",
+    "note": "The longest active streak of respectability in professional sports."
+  },
+  "John Harbaugh": {
+    "honors": "Won Super Bowl XLVII against his own brother's team.",
+    "note": "Built the offense entirely around Lamar and never looked back."
+  }
+}
