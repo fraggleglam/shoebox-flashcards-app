@@ -114,6 +114,9 @@ input,select,textarea{font:inherit}
   animation:deal .32s cubic-bezier(.2,.9,.3,1.2) backwards;
 }
 @keyframes deal{from{opacity:0;transform:translateY(14px) scale(.96)}}
+/* only the cards you can actually see get dealt in — hundreds of
+   simultaneous entry animations grind a phone to a halt */
+.grid .card:nth-child(n+25){animation:none}
 @media (prefers-reduced-motion:reduce){.card{animation:none}}
 
 .flipper{
@@ -988,6 +991,13 @@ function render(){
   if(stack) renderStack(); else renderGrid();
 }
 
+/* A full-league bake is 3,000+ cards, and a phone cannot lay that many out
+   at once — it locks the page for the better part of a minute. So the grid
+   deals a generous stack and offers the rest behind one tap, while search,
+   decks and the scout always see the whole league. */
+const GRID_CAP = 200;
+let gridShowAll = false;
+
 function renderGrid(){
   const list = visibleCards();
   const grid = $('#grid');
@@ -1005,7 +1015,12 @@ function renderGrid(){
     </div>`;
     return;
   }
-  grid.innerHTML = list.map(cardHTML).join('');
+  const shown = gridShowAll ? list : list.slice(0, GRID_CAP);
+  grid.innerHTML = shown.map(cardHTML).join('') + (shown.length < list.length ? `
+    <div class="empty" style="padding:26px 10px">
+      <p>Showing ${shown.length} of ${list.length} — search finds everybody.</p>
+      <button class="btn ghost" data-showall>Deal all ${list.length}</button>
+    </div>` : '');
 }
 
 /* ============================================================
@@ -1013,8 +1028,9 @@ function renderGrid(){
    ============================================================ */
 document.addEventListener('click', e => {
   const chip = e.target.closest('[data-deck]');
-  if(chip){ state.active = chip.dataset.deck; save(); render(); return; }
+  if(chip){ state.active = chip.dataset.deck; gridShowAll = false; save(); render(); return; }
   if(e.target.closest('[data-new-deck]')){ newDeck(); return; }
+  if(e.target.closest('[data-showall]')){ gridShowAll = true; render(); return; }
 
   const tool = e.target.closest('.backtools button');
   if(tool){
@@ -1045,7 +1061,7 @@ function flipCard(id, el){
   save();
 }
 
-$('#search').addEventListener('input', render);
+$('#search').addEventListener('input', () => { gridShowAll = false; render(); });
 $('#addCardBtn').addEventListener('click', ()=>openEditor());
 $('#fab').addEventListener('click', ()=>openEditor());
 $('#menuBtn').addEventListener('click', openMenu);
