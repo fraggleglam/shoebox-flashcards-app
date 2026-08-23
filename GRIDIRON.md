@@ -65,7 +65,13 @@ Nothing here is destructive: passing a card does nothing to it, and filing only 
 
 ## Get the real deck
 
-Out of the box the app runs on a small deck written into `index.html`. To get the real
+**On the deployed site you already have it** — the deploy bakes every roster in
+(facts only, refreshed weekly in season), so the whole league is local the moment the page
+loads and headshots stream from ESPN's image CDN. The in-app import below matters when
+you're running the file straight off disk, or when browser-side fetches to ESPN work on
+your network and you want photos cached for full offline use.
+
+Out of the box the raw file runs on a small deck written into `index.html`. To get the real
 thing — every team, real headshots, real bios — open the `⋯` menu and pick
 **🏈 Import the league from ESPN**.
 

@@ -1,14 +1,18 @@
 name: Deploy to GitHub Pages
 
-# Publishes the app on every push to main. Deliberately does NOT run
-# scripts/bake-cards.mjs: baking here would put a few hundred NFL/Getty
-# headshots on a public site. Visitors use the in-app league import instead,
-# which caches photos into their own browser.
+# Publishes the app on every push to main, and re-publishes weekly so the
+# rosters stay current through the season. The bake is FACTS ONLY
+# (--no-photos): phones can't always fetch ESPN's data API from a browser
+# page, but this runner can — so the deck ships pre-loaded and nobody needs
+# the in-app import. Headshots stay as <img> hotlinks to ESPN's CDN, which
+# browsers load fine; no NFL/Getty images are republished from this site.
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '37 10 * * 2'   # Tuesdays, after the Monday-night roster churn
 
 permissions:
   contents: read
@@ -27,6 +31,12 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+
+      # If ESPN is down or has moved, the deploy still ships — the app just
+      # falls back to its built-in deck (and the in-app import still exists).
+      - name: Bake the league (facts only)
+        continue-on-error: true
+        run: node scripts/bake-cards.mjs --all --no-photos
 
       # Pages has to be switched on once by hand — Settings → Pages → Source.
       # `enablement: true` used to sit here and always failed: the workflow
