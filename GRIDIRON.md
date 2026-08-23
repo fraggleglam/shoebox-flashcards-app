@@ -29,6 +29,13 @@ To put it on the web, drag this folder into Netlify — it's a static page, noth
   where the old trivia cartoon used to live.
 - **Two ways to look at them.** The grid lays the whole collection out. The **stack** (`▤` in
   the top bar) hands you one card at a time with the rest of the pile behind it — see below.
+- **Scout anybody, mid-game.** Somebody you've never heard of just caught a pass? Type his
+  name. If your collection doesn't know him, one tap pulls his card straight out of ESPN —
+  photo, bio, live stats, latest headline — and files it, so next time he's already local.
+  Also in the `⋯` menu as **🔎 Scout a player**.
+- **Team decks in two taps.** `⋯` menu → **🏟 Deal a team deck** → pick a team and a side
+  (Offense / Defense / Full squad, coach included) and the deck deals itself, sorted the way
+  a program would print it. Deal it again after a league import and it refreshes in place.
 - **Decks.** Make as many as you want, name them anything, add any card to any number of
   them. Saved automatically.
 - **Make your own cards.** Anyone — a coach, a GM, your buddy. Name, team, position, number,
@@ -98,11 +105,11 @@ hand-made cards across by name.
 note — keyed by player name. The bake grafts it onto the fetched facts, so re-baking never
 overwrites your voice. Add anyone you like.
 
-### The one thing that stays live
+### The things that stay live
 
-**⟳ Refresh** on the back of a card pulls a recent headline. That is the only runtime network
-call, it happens only when you ask for it, and if it fails the card keeps what it has and
-offers a **Search the news →** link instead. Nothing breaks offline.
+**⟳ Refresh** on the back of a card pulls a recent headline, and **Scout** pulls a card for
+someone you don't have yet. Those are the only runtime network calls, they happen only when
+you ask, and when they fail the deck you have is untouched. Nothing breaks offline.
 
 ### A note on the photos
 

@@ -988,12 +988,15 @@ function renderGrid(){
   const grid = $('#grid');
   if(!list.length){
     const inDeck = state.active !== 'ALL';
+    const q = ($('#search').value || '').trim();
     grid.innerHTML = `<div class="empty">
-      <h2>${inDeck ? 'This deck is empty' : 'No cards found'}</h2>
-      <p>${inDeck
-        ? 'Flip any card and hit <b>Decks</b> to add it here.'
-        : 'Try a different search, or make a card of your own.'}</p>
-      <button class="btn" onclick="openEditor()">+ New card</button>
+      <h2>${q ? `Nobody called “${esc(q)}” here` : (inDeck ? 'This deck is empty' : 'No cards found')}</h2>
+      <p>${q
+        ? 'He might be real, though — pull his card straight out of ESPN.'
+        : (inDeck ? 'Flip any card and hit <b>Decks</b> to add it here.'
+                  : 'Try a different search, or make a card of your own.')}</p>
+      ${q ? `<button class="btn" data-scout>🔎 Scout “${esc(q)}”</button> ` : ''}
+      <button class="btn ${q ? 'ghost' : ''}" onclick="openEditor()">+ New card</button>
     </div>`;
     return;
   }
@@ -1018,6 +1021,7 @@ document.addEventListener('click', e => {
     if(act === 'edit')    openEditor(id);
     return;
   }
+  if(e.target.closest('[data-scout]')){ scoutPlayer($('#search').value); return; }
   if(e.target.closest('.newsbox a')) { e.stopPropagation(); return; }
 
   const card = e.target.closest('.card');
@@ -1094,7 +1098,9 @@ function renderStack(){
       : `<h2>${state.active === 'ALL' ? 'No cards found' : 'This deck is empty'}</h2>
          <p>${state.active === 'ALL'
               ? 'Try a different search, or make a card of your own.'
-              : 'Swipe cards right from All Cards to fill it.'}</p>`;
+              : 'Swipe cards right from All Cards to fill it.'}</p>
+         ${($('#search').value || '').trim()
+              ? `<button class="btn" data-scout>🔎 Scout “${esc($('#search').value.trim())}”</button>` : ''}`;
     const again = done.querySelector('#restack');
     if(again) again.onclick = ()=>{ stackIdx = 0; stackHist = []; renderStack(); };
     return;
@@ -1272,6 +1278,71 @@ function openDeckPicker(cardId){
   });
 }
 
+/* Deal a whole side of the ball into its own deck — the Cowboys offense
+   in two taps instead of swiping forty guys one at a time. */
+const SIDES = {
+  offense: {label:'Offense',    set:new Set(['QB','RB','FB','WR','TE','OT','T','G','C','OL'])},
+  defense: {label:'Defense',    set:new Set(['DE','EDGE','DT','NT','LB','OLB','ILB','MLB','CB','S','FS','SS','DB'])},
+  squad:   {label:'Full squad', set:null}
+};
+
+function openTeamDeck(){
+  const counts = {};
+  Object.values(state.cards).forEach(c => {
+    if(c.team && c.team !== 'FA') counts[c.team] = (counts[c.team] || 0) + 1;
+  });
+  const teams = Object.keys(counts).sort();
+  if(!teams.length){ toast('No team cards yet — import the league first'); return; }
+
+  const teamOpts = teams.map(t =>
+    `<option value="${t}">${t} — ${esc(teamOf(t)[0])} · ${counts[t]}</option>`).join('');
+  const sideOpts = Object.entries(SIDES).map(([k,s]) =>
+    `<option value="${k}">${s.label}</option>`).join('');
+
+  modal(`
+    <h3>Team deck</h3>
+    <p class="hint" style="margin:-4px 0 14px">
+      Deals every card you have for a team into its own deck, sorted the way a
+      program would print them. Run the league import first and this draws
+      from real rosters instead of the starter pack.</p>
+    <div class="row">
+      <div class="field"><label>Team</label><select id="t_team">${teamOpts}</select></div>
+      <div class="field"><label>Who</label><select id="t_side">${sideOpts}</select></div>
+    </div>
+    <div class="actions">
+      <button class="btn ghost" id="cancel">Cancel</button>
+      <button class="btn" id="go">Deal the deck</button>
+    </div>
+  `, root => {
+    root.querySelector('#cancel').onclick = closeModal;
+    root.querySelector('#go').onclick = () => {
+      const d = buildTeamDeck(root.querySelector('#t_team').value,
+                              root.querySelector('#t_side').value);
+      closeModal();
+      toast(d.cards.length ? `${d.name} — ${d.cards.length} cards` : `${d.name} came up empty`);
+    };
+  });
+}
+
+function buildTeamDeck(team, side){
+  const wanted = SIDES[side].set;
+  const rank = c => { const i = POS_RANK.indexOf(c.pos); return i === -1 ? 99 : i; };
+  // coaches ride with the full squad only — `wanted` is null there
+  const members = Object.values(state.cards)
+    .filter(c => c.team === team && (!wanted || wanted.has(c.pos)))
+    .sort((a,b) => rank(a) - rank(b) ||
+      String(a.jersey).localeCompare(String(b.jersey), undefined, {numeric:true}))
+    .map(c => c.id);
+
+  const name = side === 'squad' ? `${team} Full Squad` : `${team} ${SIDES[side].label}`;
+  let d = state.decks.find(x => x.name === name);
+  if(!d){ d = {id:uid('d_'), name, cards:[]}; state.decks.push(d); }
+  d.cards = members;                 // dealt fresh every time — re-run after an import
+  state.active = d.id;
+  save(); render();
+  return d;
+}
+
 /* ============================================================
    8. CARD EDITOR
    ============================================================ */
@@ -1402,13 +1473,7 @@ async function refreshCard(id, btn){
     if(!c.espnId) c.espnId = await lookupEspnId(c.name);
     if(!c.espnId) throw new Error('no-id');
 
-    const r = await fetch(
-      `https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/${c.espnId}/overview`,
-      {headers:{'Accept':'application/json'}});
-    if(!r.ok) throw new Error('http-' + r.status);
-    const data = await r.json();
-
-    const live = extractLive(data);
+    const live = await fetchLive(c.espnId);
     if(!live.stats && !live.news) throw new Error('empty');
     c.live = {...(c.live||{}), ...live};
     save(); render();
@@ -1419,6 +1484,15 @@ async function refreshCard(id, btn){
     btn.textContent = '⟳ Refresh';
     toast('Live data unavailable — using the card');
   }
+}
+
+/** One player's recent stats + a headline, ready for the back of a card. */
+async function fetchLive(espnId){
+  const r = await fetch(
+    `https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/${espnId}/overview`,
+    {headers:{'Accept':'application/json'}});
+  if(!r.ok) throw new Error('http-' + r.status);
+  return extractLive(await r.json());
 }
 
 /* Pull stats + a headline out of ESPN's payload. Their shape shifts
@@ -1770,6 +1844,118 @@ function openImport(){
 }
 
 /* ============================================================
+   9c. SCOUT — "who IS this guy?"
+   Somebody you've never heard of just caught a pass. Type his name;
+   if the collection doesn't know him, one tap pulls his card out of
+   ESPN — photo, bio, stats, latest headline — and files it, so next
+   time he's already local.
+   ============================================================ */
+async function searchEspnPlayers(q){
+  const urls = [
+    `https://site.web.api.espn.com/apis/common/v3/search?limit=8&sport=football&league=nfl&query=${encodeURIComponent(q)}`,
+    `https://site.web.api.espn.com/apis/search/v2?limit=10&query=${encodeURIComponent(q)}`
+  ];
+  for(const url of urls){
+    try{
+      const found = [], seen = new Set();
+      // pick() that never "finds" makes deepFind walk the whole payload,
+      // collecting every node that reads like an NFL player along the way
+      deepFind(await grab(url), node => {
+        const uid  = String(node.uid || '');
+        const type = String(node.type || '').toLowerCase();
+        if(!(type === 'athlete' || type === 'player' || /~a:\d+/.test(uid))) return null;
+        if(/s:\d+~/.test(uid) && !/s:20~/.test(uid)) return null;   // other sports
+        const id = (uid.match(/~a:(\d+)/) || [])[1] || (node.id ? String(node.id) : null);
+        const name = node.displayName || node.name || node.title;
+        if(!id || !name || seen.has(id)) return null;
+        seen.add(id);
+        found.push({id, name, blurb: node.description || node.subtitle || ''});
+        return null;
+      });
+      if(found.length) return found;
+    }catch(e){ /* try the next shape */ }
+  }
+  return [];
+}
+
+/** Full athlete profile → a card in the same shape the league import makes. */
+async function fetchAthlete(espnId){
+  const j = await grab(
+    `https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/${espnId}`);
+  const a = j?.athlete || j;
+  const name = a?.fullName || a?.displayName;
+  if(!name) throw new Error('no-athlete');
+  const team = String(a.team?.abbreviation || 'FA').toUpperCase();
+  return {
+    id: `espn_${espnId}`, espnId: String(espnId),
+    name, team: TEAMS[team] ? team : 'FA',
+    pos: (a.position?.abbreviation || '').toUpperCase(),
+    jersey: a.jersey ?? '',
+    photoRemote: a.headshot?.href || `${ESPN.cdn}/${espnId}.png&w=350&h=254`,
+    bio: [a.displayHeight, a.displayWeight, a.college?.name].filter(Boolean).join(' · '),
+    stats: [
+      ['Age', a.age],
+      ['Experience', a.experience?.years != null
+        ? (a.experience.years === 0 ? 'Rookie' : `${a.experience.years} yrs`) : null],
+      ['College', a.college?.name]
+    ].filter(([,v]) => v != null && v !== '').map(([k,v]) => ({k, v:String(v)})),
+    honors:'', note:'', photo:null, live:null
+  };
+}
+
+async function scoutPlayer(q){
+  q = (q || '').trim();
+  if(q.length < 2){ toast('Type a name to scout'); return; }
+  toast(`Scouting “${q}”…`);
+
+  let picks = [];
+  try{ picks = await searchEspnPlayers(q); }catch(e){ /* falls through */ }
+  if(!picks.length){ toast(`ESPN has nobody called “${q}”`); return; }
+  if(picks.length === 1) return adoptScout(picks[0].id);
+
+  modal(`
+    <h3>Which one?</h3>
+    <div class="decklist">${picks.slice(0,6).map(p => `
+      <button class="deckrow" data-pick="${esc(p.id)}" style="text-align:left">
+        <span>${esc(p.name)}</span><small>${esc(p.blurb)}</small></button>`).join('')}
+    </div>
+    <div class="actions"><button class="btn ghost" id="cancel">Cancel</button></div>
+  `, root => {
+    root.querySelector('#cancel').onclick = closeModal;
+    root.querySelectorAll('[data-pick]').forEach(b =>
+      b.onclick = () => { closeModal(); adoptScout(b.dataset.pick); });
+  });
+}
+
+async function adoptScout(espnId){
+  // already in the shoebox? just deal his card to the front
+  const have = Object.values(state.cards).find(c => c.espnId === String(espnId));
+  if(have){
+    state.active = 'ALL'; $('#search').value = have.name;
+    save(); render(); return;
+  }
+
+  let card;
+  try{ card = await fetchAthlete(espnId); }
+  catch(e){ toast('Could not pull his card from ESPN'); return; }
+
+  card.no = Object.keys(state.cards).length + 1;
+  state.cards[card.id] = card;
+
+  // photo into the vault, stats + news onto the back — both best-effort,
+  // the card is already real without them
+  cachePhoto(card).then(ok => ok && loadVault().then(render)).catch(()=>{});
+  fetchLive(card.espnId).then(live => {
+    if(live.stats || live.news){ card.live = live; save(); render(); }
+  }).catch(()=>{});
+
+  state.active = 'ALL';
+  $('#search').value = card.name;      // land right on the new card
+  save(); render();
+  toast(`🏈 ${card.name} — added to the collection`);
+}
+
+/* ============================================================
    10. MENU — import / export / reset
    ============================================================ */
 function openMenu(){
@@ -1778,6 +1964,10 @@ function openMenu(){
     <div class="decklist">
       <button class="deckrow" id="league" style="text-align:left">
         <span>🏈 Import the league from ESPN</span><small>once</small></button>
+      <button class="deckrow" id="scoutBtn" style="text-align:left">
+        <span>🔎 Scout a player</span><small>live</small></button>
+      <button class="deckrow" id="teamDeckBtn" style="text-align:left">
+        <span>🏟 Deal a team deck</span><small>auto</small></button>
       <button class="deckrow" id="exp" style="text-align:left">
         <span>⬇ Export collection</span><small>.json</small></button>
       <button class="deckrow" id="imp" style="text-align:left">
@@ -1795,6 +1985,12 @@ function openMenu(){
   `, root => {
     root.querySelector('#cancel').onclick = closeModal;
     root.querySelector('#league').onclick = ()=>{ closeModal(); openImport(); };
+    root.querySelector('#teamDeckBtn').onclick = ()=>{ closeModal(); openTeamDeck(); };
+    root.querySelector('#scoutBtn').onclick = ()=>{
+      closeModal();
+      const q = prompt('Who are you looking for?', '');
+      if(q) scoutPlayer(q);
+    };
 
     root.querySelector('#exp').onclick = ()=>{
       const blob = new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
