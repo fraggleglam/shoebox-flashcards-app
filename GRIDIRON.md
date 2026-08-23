@@ -27,6 +27,8 @@ To put it on the web, drag this folder into Netlify — it's a static page, noth
 - **Tap to flip.** Front is the photo, the team colors, the jersey number and a position
   pennant. Back is the card number, bio line, stat table, a "did you know," and a news box
   where the old trivia cartoon used to live.
+- **Two ways to look at them.** The grid lays the whole collection out. The **stack** (`▤` in
+  the top bar) hands you one card at a time with the rest of the pile behind it — see below.
 - **Decks.** Make as many as you want, name them anything, add any card to any number of
   them. Saved automatically.
 - **Make your own cards.** Anyone — a coach, a GM, your buddy. Name, team, position, number,
@@ -34,6 +36,25 @@ To put it on the web, drag this folder into Netlify — it's a static page, noth
   resized so they don't blow out browser storage.
 - **Search** across names, teams and positions.
 - **Export / import** your whole collection as JSON, from the `⋯` menu.
+
+## The stack
+
+Hit `▤` in the top bar and the grid becomes a pile of cards, one face up, the next two
+peeking out behind it. It's the shoebox on the floor rather than the binder on the shelf.
+
+- **Drag it left to pass, right to file it.** A `PASS`/`FILE` stamp fades in as you go, and
+  the card only commits once you're past the line — let go short of it and it springs back.
+- **"Filing into"** at the top picks which deck a right-swipe drops the card into. Change it
+  mid-run, or make a new deck straight from the picker. Sorting a hundred cards into three
+  piles takes about a minute.
+- **Tap the card to flip it**, same as the grid. A press that barely moves is a tap; a press
+  that travels is a swipe.
+- **⟲ puts the last one back**, card and deck membership both.
+- **Keyboard:** `←` pass, `→` file, `space` flip, `backspace` undo.
+- The deck chips still filter, so you can flip through just one deck — or search first and
+  sort only what comes back.
+
+Nothing here is destructive: passing a card does nothing to it, and filing only ever adds.
 
 ## Get the real deck
 
@@ -111,4 +132,5 @@ obvious next step here, and would make this paragraph shorter.)
 ## Layout
 
 `index.html` is the entire app, organized in numbered sections: teams → seed deck → state →
-helpers → render → interactions → decks → editor → live refresh → menu → modals.
+helpers → photo vault → render → interactions → **the stack** → decks → editor → live
+refresh → league import → menu → modals.

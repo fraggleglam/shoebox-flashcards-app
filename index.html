@@ -285,6 +285,86 @@ table.stats td:last-child{text-align:right;font-weight:700;font-variant-numeric:
 .backtools button:hover{background:#fff;border-color:#7d6a3c}
 .backtools button.busy{opacity:.5;pointer-events:none}
 
+/* ---------- the stack (shoebox view) ----------
+   One card at a time, the rest peeking out behind it. Drag it left to pass,
+   right to file it into a deck — the way you'd actually sort a shoebox. */
+.stagewrap{
+  display:none;flex-direction:column;align-items:center;
+  gap:15px;padding:20px 14px calc(26px + var(--safe-b));
+  /* No selecting on the stack. The first swipe would otherwise select the name
+     on the card, and the next press landing on that selection makes the browser
+     start a native text drag — which fires pointercancel and silently killed
+     every swipe after the first. */
+  user-select:none;-webkit-user-select:none;
+}
+.stage img{-webkit-user-drag:none;user-drag:none}
+body.stackmode .stagewrap{display:flex}
+body.stackmode .grid{display:none}
+body.stackmode .fab{display:none}
+
+.filing{
+  display:flex;align-items:center;gap:9px;
+  font:600 9px/1 ui-sans-serif,sans-serif;letter-spacing:.16em;
+  text-transform:uppercase;color:#9a8f7c;
+}
+.filing select{
+  background:#141312;border:1px solid #413b33;border-radius:999px;
+  color:var(--stock);padding:7px 12px;outline:none;
+  font-size:13px;letter-spacing:0;text-transform:none;font-weight:500;
+}
+.filing select:focus{border-color:var(--accent)}
+
+/* padding-bottom is clearance for the two cards peeking out underneath —
+   without it they overlap the swipe buttons. */
+.stagebox{position:relative;width:min(300px,76vw);padding-bottom:34px}
+/* pan-y so a vertical scroll still scrolls the page, but horizontal drags
+   are ours — otherwise mobile steals the gesture halfway through a swipe. */
+.stage{position:relative;width:100%;aspect-ratio:2.5/3.5;touch-action:pan-y}
+.stage .card{position:absolute;inset:0;animation:none}
+.stage .card[data-depth="0"]{z-index:3;cursor:grab;animation:rise .26s cubic-bezier(.2,.9,.3,1.1)}
+.stage .card[data-depth="1"]{z-index:2;transform:translateY(16px) scale(.96) rotate(-2.6deg);filter:brightness(.78)}
+.stage .card[data-depth="2"]{z-index:1;transform:translateY(30px) scale(.92) rotate(2.4deg);filter:brightness(.58)}
+.stage .card[data-depth="1"],.stage .card[data-depth="2"]{pointer-events:none}
+@keyframes rise{from{transform:translateY(16px) scale(.96) rotate(-2.6deg)}}
+/* spring back when you let go short of the line */
+.stage .card.settling{transition:transform .34s cubic-bezier(.2,.9,.3,1.2)}
+.stage .card.gone{transition:transform .3s ease-in,opacity .3s ease-in;opacity:0}
+@media (prefers-reduced-motion:reduce){
+  .stage .card[data-depth="0"]{animation:none}
+  .stage .card.settling,.stage .card.gone{transition:none}
+}
+
+.stamp{
+  position:absolute;top:18px;z-index:6;pointer-events:none;opacity:0;
+  font-family:Impact,"Arial Narrow Bold",sans-serif;font-size:25px;letter-spacing:.09em;
+  text-transform:uppercase;padding:4px 12px 5px;border:3px solid;border-radius:7px;
+  background:rgba(20,18,16,.35);
+}
+.stamp.file{right:12px;color:#4fb469;border-color:#4fb469;transform:rotate(12deg)}
+.stamp.pass{left:12px;color:#d2634c;border-color:#d2634c;transform:rotate(-12deg)}
+
+.swipebar{display:flex;align-items:center;gap:15px}
+.swipebar button{
+  width:52px;height:52px;border-radius:50%;border:1px solid #4a4238;
+  background:#211e1a;display:grid;place-items:center;font-size:19px;color:#c8bda6;
+  box-shadow:0 4px 12px -4px rgba(0,0,0,.6);
+}
+.swipebar button.undo{width:40px;height:40px;font-size:15px;color:#8a8072}
+.swipebar button.pass:hover{border-color:#d2634c;color:#e0755f}
+.swipebar button.file:hover{border-color:#4fb469;color:#5fc47c}
+.swipebar button.undo:hover{border-color:#8a8072;color:#c8bda6}
+.swipebar button:disabled{opacity:.3;pointer-events:none}
+.counter{
+  font:600 10px/1 ui-sans-serif,sans-serif;letter-spacing:.18em;
+  text-transform:uppercase;color:#7d7364;font-variant-numeric:tabular-nums;
+}
+.stackdone{text-align:center;color:#8a8072;padding:26px 10px 6px;max-width:300px}
+.stackdone h2{
+  font-family:Impact,sans-serif;font-weight:400;letter-spacing:.05em;
+  text-transform:uppercase;font-size:19px;color:#c9bda4;margin:0 0 7px;
+}
+.stackdone p{margin:0 0 16px;font-size:13px;line-height:1.6}
+
 /* ---------- modals ---------- */
 .scrim{
   position:fixed;inset:0;z-index:80;background:rgba(10,9,8,.72);
@@ -328,11 +408,13 @@ table.stats td:last-child{text-align:right;font-weight:700;font-variant-numeric:
 .deckrow span{flex:1;font-size:14px}
 .deckrow small{font-size:11px;color:#847a6a;font-variant-numeric:tabular-nums}
 
-.bar{
+/* Import progress. Named .pbar, not .bar — that one is the sticky header, and
+   `height:6px;overflow:hidden` landing on it clipped the whole top of the app. */
+.pbar{
   height:6px;border-radius:999px;background:#161412;overflow:hidden;
   border:1px solid #3a332b;margin-top:14px;
 }
-.bar i{
+.pbar i{
   display:block;height:100%;width:0;border-radius:999px;background:var(--accent);
   transition:width .3s ease;
 }
@@ -364,12 +446,34 @@ table.stats td:last-child{text-align:right;font-weight:700;font-variant-numeric:
   <div class="brand">Gridiron<em>flash cards</em></div>
   <span class="spacer"></span>
   <input id="search" class="search" type="search" placeholder="Search cards…" autocomplete="off">
+  <button class="iconbtn" id="viewBtn" title="Switch view">▤</button>
   <button class="iconbtn primary" id="addCardBtn" title="New card">+</button>
   <button class="iconbtn" id="menuBtn" title="Menu">⋯</button>
 </header>
 
 <nav class="decks" id="deckBar"></nav>
 <main class="grid" id="grid"></main>
+
+<!-- The shoebox: one card up front, the rest of the stack behind it. -->
+<section class="stagewrap" id="stagewrap">
+  <div class="filing">
+    <span>Filing into</span>
+    <select id="fileTo" aria-label="Deck that swiping right files into"></select>
+  </div>
+  <div class="stagebox">
+    <div class="stage" id="stage"></div>
+    <div class="stamp pass" id="stampPass">Pass</div>
+    <div class="stamp file" id="stampFile">File</div>
+  </div>
+  <div class="stackdone" id="stackDone" hidden></div>
+  <div class="swipebar">
+    <button class="pass" id="swPass" title="Pass — left arrow">✕</button>
+    <button class="undo" id="swUndo" title="Put the last one back — backspace">⟲</button>
+    <button class="file" id="swFile" title="File it — right arrow">★</button>
+  </div>
+  <div class="counter" id="stackCount">0 / 0</div>
+</section>
+
 <button class="fab" id="fab" title="New card">+</button>
 
 <!-- Written by scripts/bake-cards.mjs. Absent until you run the bake — that's
@@ -623,6 +727,8 @@ function load(){
     cards: defaultCards(),
     decks: [{id:'d_starter', name:'Starter Pack', cards:[]}],
     active: 'ALL',
+    view: 'grid',
+    fileTo: 'd_starter',
     flipped: {},
     stamp: STAMP
   };
@@ -660,6 +766,8 @@ function adoptBaked(saved){
     decks,
     active: (saved.active === 'ALL' || decks.some(d => d.id === saved.active))
       ? saved.active : 'ALL',
+    view: saved.view,
+    fileTo: saved.fileTo,
     flipped: {},
     stamp: STAMP
   };
@@ -668,6 +776,12 @@ function adoptBaked(saved){
 /* Declared after everything load() leans on, so the consts above are
    initialised by the time it runs. */
 let state = load();
+
+/* Fields that arrived after the first release. A collection saved by an older
+   build — or imported from someone else's export — simply won't have them, so
+   fill them in rather than letting the stack read `undefined`. */
+if(state.view !== 'stack') state.view = 'grid';
+if(!state.decks.some(d => d.id === state.fileTo)) state.fileTo = state.decks[0]?.id || null;
 
 let saveTimer;
 function save(){
@@ -862,6 +976,14 @@ function cardHTML(c){
 
 function render(){
   renderDeckBar();
+  const stack = state.view === 'stack';
+  document.body.classList.toggle('stackmode', stack);
+  $('#viewBtn').textContent = stack ? '⊞' : '▤';
+  $('#viewBtn').title = stack ? 'Back to the grid' : 'Flip through the stack';
+  if(stack) renderStack(); else renderGrid();
+}
+
+function renderGrid(){
   const list = visibleCards();
   const grid = $('#grid');
   if(!list.length){
@@ -900,27 +1022,225 @@ document.addEventListener('click', e => {
 
   const card = e.target.closest('.card');
   if(card){
-    const id = card.dataset.id;
-    state.flipped[id] = !state.flipped[id];
-    card.classList.toggle('flipped');
-    save();
+    // In the stack a tap is the tail end of a drag gesture, so the pointer
+    // handlers below decide whether it was a flip. Clicking here too would
+    // flip it straight back.
+    if(card.closest('.stage')) return;
+    flipCard(card.dataset.id, card);
   }
 });
+
+function flipCard(id, el){
+  state.flipped[id] = !state.flipped[id];
+  el.classList.toggle('flipped');
+  save();
+}
 
 $('#search').addEventListener('input', render);
 $('#addCardBtn').addEventListener('click', ()=>openEditor());
 $('#fab').addEventListener('click', ()=>openEditor());
 $('#menuBtn').addEventListener('click', openMenu);
+$('#viewBtn').addEventListener('click', ()=>{
+  state.view = state.view === 'stack' ? 'grid' : 'stack';
+  save(); render();
+});
+
+/* ============================================================
+   6b. THE STACK
+   Drag the top card left to pass, right to file it into a deck.
+   Buttons and arrow keys do the same thing for anyone not swiping.
+   ============================================================ */
+const SWIPE_AT = 92;            // px past which a release commits
+let stackIdx  = 0;              // how far into the current list we are
+let stackHist = [];             // {id, deckId|null} — enough to undo a swipe
+let stackSig  = null;           // list identity; changes reset our place
+let drag = null;
+
+const topCard = () => $('.stage .card[data-depth="0"]');
+
+function renderFiling(){
+  const sel = $('#fileTo');
+  if(!state.decks.some(d => d.id === state.fileTo)) state.fileTo = state.decks[0]?.id || null;
+  sel.innerHTML = state.decks.map(d =>
+    `<option value="${d.id}"${d.id===state.fileTo?' selected':''}>${esc(d.name)} · ${d.cards.length}</option>`
+  ).join('') + '<option value="__new">+ New deck…</option>';
+}
+
+function renderStack(){
+  const list = visibleCards();
+
+  // Searching or switching decks builds a different pile — start it at the top.
+  const sig = state.active + ' ' + ($('#search').value || '');
+  if(sig !== stackSig){ stackSig = sig; stackIdx = 0; stackHist = []; }
+  if(stackIdx > list.length) stackIdx = list.length;
+
+  renderFiling();
+  const stage = $('#stage'), done = $('#stackDone');
+  const left  = Math.max(0, list.length - stackIdx);
+
+  $('#stackCount').textContent = list.length
+    ? `${Math.min(stackIdx + 1, list.length)} of ${list.length}`
+    : 'empty';
+  $('#swUndo').disabled = !stackHist.length;
+  $('#swPass').disabled = $('#swFile').disabled = !left;
+
+  if(!left){
+    stage.innerHTML = '';
+    done.hidden = false;
+    done.innerHTML = list.length
+      ? `<h2>End of the stack</h2>
+         <p>${list.length} card${list.length===1?'':'s'} sorted.</p>
+         <button class="btn ghost" id="restack">↺ Run it again</button>`
+      : `<h2>${state.active === 'ALL' ? 'No cards found' : 'This deck is empty'}</h2>
+         <p>${state.active === 'ALL'
+              ? 'Try a different search, or make a card of your own.'
+              : 'Swipe cards right from All Cards to fill it.'}</p>`;
+    const again = done.querySelector('#restack');
+    if(again) again.onclick = ()=>{ stackIdx = 0; stackHist = []; renderStack(); };
+    return;
+  }
+
+  done.hidden = true;
+  // Deepest first in the DOM so the live card is painted last.
+  const slice = [];
+  for(let i = 0; i < 3 && list[stackIdx + i]; i++) slice.push(list[stackIdx + i]);
+  stage.innerHTML = slice.slice().reverse().map(cardHTML).join('');
+  [...stage.querySelectorAll('.card')].forEach((el, i) => {
+    el.dataset.depth = String(slice.length - 1 - i);
+  });
+  clearStamps();
+}
+
+function clearStamps(){
+  $('#stampPass').style.opacity = $('#stampFile').style.opacity = 0;
+}
+
+/* ----- dragging ----- */
+$('#stage').addEventListener('pointerdown', e => {
+  const top = topCard();
+  if(!top || !top.contains(e.target)) return;
+  if(e.target.closest('.backtools button, .newsbox a')) return;   // let the tools work
+  drag = {el:top, x0:e.clientX, y0:e.clientY, dx:0, dy:0, moved:false, pid:e.pointerId};
+  top.classList.remove('settling');
+  top.style.animation = 'none';        // the entry animation would fight the drag
+  try{ top.setPointerCapture(e.pointerId); }catch(err){ /* capture is a nicety */ }
+});
+
+$('#stage').addEventListener('pointermove', e => {
+  if(!drag || e.pointerId !== drag.pid) return;
+  drag.dx = e.clientX - drag.x0;
+  drag.dy = e.clientY - drag.y0;
+  if(Math.abs(drag.dx) > 6 || Math.abs(drag.dy) > 6) drag.moved = true;
+  drag.el.style.transform =
+    `translate(${drag.dx}px, ${drag.dy * .32}px) rotate(${drag.dx / 18}deg)`;
+  const t = Math.min(1, Math.abs(drag.dx) / SWIPE_AT);
+  $('#stampFile').style.opacity = drag.dx > 0 ? t : 0;
+  $('#stampPass').style.opacity = drag.dx < 0 ? t : 0;
+});
+
+function springBack(el){
+  el.classList.add('settling');
+  el.style.transform = '';
+  clearStamps();
+}
+
+function endDrag(e){
+  if(!drag || (e && e.pointerId !== drag.pid)) return;
+  const d = drag; drag = null;
+
+  if(!d.moved){                                   // never really moved — it's a tap
+    clearStamps(); d.el.style.transform = '';
+    flipCard(d.el.dataset.id, d.el);
+    return;
+  }
+  if(Math.abs(d.dx) > SWIPE_AT){ commitSwipe(d.dx > 0 ? 'file' : 'pass', d.el); return; }
+  springBack(d.el);                               // short of the line
+}
+
+/* The browser can take a gesture away from us mid-swipe. Whatever we had is
+   not a decision the reader made, so put the card back rather than file it. */
+function abortDrag(e){
+  if(!drag || (e && e.pointerId !== drag.pid)) return;
+  const d = drag; drag = null;
+  springBack(d.el);
+}
+
+$('#stage').addEventListener('pointerup', endDrag);
+$('#stage').addEventListener('pointercancel', abortDrag);
+$('#stage').addEventListener('dragstart', e => e.preventDefault());
+
+/* ----- committing ----- */
+function commitSwipe(kind, el){
+  const card = visibleCards()[stackIdx];
+  if(!card) return;
+
+  let filedTo = null;
+  if(kind === 'file'){
+    const d = state.decks.find(x => x.id === state.fileTo);
+    if(!d){
+      toast('Make a deck to file into first');
+      if(el){ el.classList.add('settling'); el.style.transform = ''; }
+      clearStamps();
+      return;
+    }
+    if(!d.cards.includes(card.id)){ d.cards.push(card.id); filedTo = d.id; }
+    toast(`${card.name} → ${d.name}`);
+  }
+  stackHist.push({id:card.id, deckId:filedTo});
+  stackIdx++;
+  save();
+  clearStamps();
+
+  if(!el){ renderStack(); renderDeckBar(); return; }
+  el.classList.add('gone');
+  el.style.transform = `translate(${kind === 'file' ? 520 : -520}px, 60px)
+                        rotate(${kind === 'file' ? 24 : -24}deg)`;
+  setTimeout(()=>{ renderStack(); renderDeckBar(); }, 200);
+}
+
+function undoSwipe(){
+  const last = stackHist.pop();
+  if(!last) return;
+  if(last.deckId){
+    const d = state.decks.find(x => x.id === last.deckId);
+    if(d) d.cards = d.cards.filter(x => x !== last.id);
+  }
+  stackIdx = Math.max(0, stackIdx - 1);
+  save(); renderStack(); renderDeckBar();
+  toast('Put back');
+}
+
+$('#swPass').addEventListener('click', ()=>commitSwipe('pass', topCard()));
+$('#swFile').addEventListener('click', ()=>commitSwipe('file', topCard()));
+$('#swUndo').addEventListener('click', undoSwipe);
+$('#fileTo').addEventListener('change', e => {
+  if(e.target.value === '__new'){ newDeck({fileInto:true}); return; }
+  state.fileTo = e.target.value;
+  save();
+});
+
+document.addEventListener('keydown', e => {
+  if(state.view !== 'stack' || $('.scrim')) return;
+  if(/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')) return;
+  if(e.key === 'ArrowLeft'){ e.preventDefault(); commitSwipe('pass', topCard()); }
+  else if(e.key === 'ArrowRight'){ e.preventDefault(); commitSwipe('file', topCard()); }
+  else if(e.key === 'Backspace'){ e.preventDefault(); undoSwipe(); }
+  else if(e.key === ' ' || e.key === 'Enter'){
+    const t = topCard(); if(t){ e.preventDefault(); flipCard(t.dataset.id, t); }
+  }
+});
 
 /* ============================================================
    7. DECKS
    ============================================================ */
-function newDeck(){
+/* opts.fileInto — made from the stack's "Filing into" picker, so the new deck
+   becomes the swipe-right target instead of the deck you're browsing. */
+function newDeck(opts = {}){
   const name = prompt('Name your deck', 'My Deck');
-  if(!name) return;
+  if(!name){ if(opts.fileInto) renderFiling(); return; }   // put the picker back
   const d = {id:uid('d_'), name:name.trim().slice(0,40), cards:[]};
   state.decks.push(d);
-  state.active = d.id;
+  if(opts.fileInto) state.fileTo = d.id; else state.active = d.id;
   save(); render();
   toast('Deck created');
 }
@@ -1405,7 +1725,7 @@ function openImport(){
     <p class="hint">Leave this on. Off means cards keep pointing at ESPN's servers
       and you'll need a connection every time you open the app.</p>
     <div id="i_prog" hidden>
-      <div class="bar"><i id="i_fill"></i></div>
+      <div class="pbar"><i id="i_fill"></i></div>
       <p class="hint" id="i_msg" style="margin:8px 0 0">Starting…</p>
     </div>
     <div class="actions">
