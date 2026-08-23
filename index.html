@@ -748,7 +748,12 @@ function adoptBaked(saved){
 
   const mine = {};
   Object.values(saved.cards || {}).forEach(c => {
-    if(String(c.id).startsWith('c_')) mine[c.id] = c;
+    const id = String(c.id);
+    if(id.startsWith('c_')) mine[id] = c;
+    // a scouted player the bake doesn't know — practice squad, just signed —
+    // keeps his card rather than vanishing under the new deck
+    else if(id.startsWith('espn_') && !fresh[id] && !byName[String(c.name).toLowerCase()])
+      mine[id] = c;
   });
 
   const remap = oldId => {
@@ -1743,9 +1748,17 @@ async function importLeague({perTeam = 16, withPhotos = true}, report){
 
   report('Filing the cards…', 97);
 
-  // Keep the cards you made yourself; replace the rest with the real league.
+  // Keep the cards you made yourself — and scouted players the import
+  // didn't bring back — and replace the rest with the real league.
+  const importedNames = new Set(merged.map(c => c.name.toLowerCase()));
+  const importedIds   = new Set(merged.map(c => c.id));
   const mine = {};
-  Object.values(state.cards).forEach(c => { if(String(c.id).startsWith('c_')) mine[c.id] = c; });
+  Object.values(state.cards).forEach(c => {
+    const id = String(c.id);
+    if(id.startsWith('c_')) mine[id] = c;
+    else if(id.startsWith('espn_') && !importedIds.has(id) &&
+            !importedNames.has(String(c.name).toLowerCase())) mine[id] = c;
+  });
 
   const prev = {};
   Object.values(state.cards).forEach(c => { prev[String(c.name).toLowerCase()] = c; });
@@ -1834,8 +1847,11 @@ function openImport(){
         prog.hidden = true;
         go.disabled = false; go.textContent = 'Try again';
         root.querySelector('#i_depth').disabled = false;
-        const why = err.message === 'cancelled' ? 'Cancelled.'
-          : 'Could not reach ESPN. Check your connection — the deck you have is untouched.';
+        const raw = String((err && err.message) || err);
+        const why = raw === 'cancelled' ? 'Cancelled.'
+          : `Could not reach ESPN — ${/fetch|load failed|network/i.test(raw)
+              ? 'the browser blocked the request (usually CORS or a content blocker)'
+              : raw}. The deck you have is untouched.`;
         msg.textContent = why;
         prog.hidden = false; fill.style.width = '0%';
       }
@@ -1855,6 +1871,7 @@ async function searchEspnPlayers(q){
     `https://site.web.api.espn.com/apis/common/v3/search?limit=8&sport=football&league=nfl&query=${encodeURIComponent(q)}`,
     `https://site.web.api.espn.com/apis/search/v2?limit=10&query=${encodeURIComponent(q)}`
   ];
+  let lastErr = null, reached = false;
   for(const url of urls){
     try{
       const found = [], seen = new Set();
@@ -1873,8 +1890,11 @@ async function searchEspnPlayers(q){
         return null;
       });
       if(found.length) return found;
-    }catch(e){ /* try the next shape */ }
+      reached = true;                      // ESPN answered — just no hits
+    }catch(e){ lastErr = e; }              // try the next shape
   }
+  // an empty answer and an unreachable ESPN deserve different messages
+  if(!reached && lastErr) throw lastErr;
   return [];
 }
 
@@ -1909,7 +1929,13 @@ async function scoutPlayer(q){
   toast(`Scouting “${q}”…`);
 
   let picks = [];
-  try{ picks = await searchEspnPlayers(q); }catch(e){ /* falls through */ }
+  try{ picks = await searchEspnPlayers(q); }
+  catch(e){
+    const raw = String((e && e.message) || e);
+    toast(`ESPN wouldn't answer — ${/fetch|load failed|network/i.test(raw)
+      ? 'blocked by the browser (CORS or a content blocker)' : raw}`);
+    return;
+  }
   if(!picks.length){ toast(`ESPN has nobody called “${q}”`); return; }
   if(picks.length === 1) return adoptScout(picks[0].id);
 
@@ -1937,7 +1963,7 @@ async function adoptScout(espnId){
 
   let card;
   try{ card = await fetchAthlete(espnId); }
-  catch(e){ toast('Could not pull his card from ESPN'); return; }
+  catch(e){ toast(`Could not pull his card — ${String((e && e.message) || e).slice(0, 60)}`); return; }
 
   card.no = Object.keys(state.cards).length + 1;
   state.cards[card.id] = card;

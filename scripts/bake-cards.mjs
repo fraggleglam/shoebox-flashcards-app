@@ -250,7 +250,10 @@ async function main() {
     c.no = i + 1;
     const n = notes[c.name];
     if (n) { c.honors = n.honors || ''; c.note = n.note || ''; }
-    delete c.photoRemote;
+    // --no-photos keeps the remote URLs, as promised up top: browsers can
+    // load ESPN's image CDN as plain <img> even where the data API is
+    // walled off, so a facts-only bake still gets faces on the cards.
+    if (OPTS.photos) delete c.photoRemote;
   });
 
   const teamMap = Object.fromEntries(teams.map(t =>
